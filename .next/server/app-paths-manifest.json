@@ -1,0 +1,7 @@
+{
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(flow)/collections/create/details/page": "app/(flow)/collections/create/details/page.js",
+  "/page": "app/page.js",
+  "/(auth)/signup/page": "app/(auth)/signup/page.js",
+  "/(app)/profile/page": "app/(app)/profile/page.js"
+}
