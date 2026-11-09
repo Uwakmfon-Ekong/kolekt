@@ -8,7 +8,7 @@ import { UseCases } from "@/components/landing/sections/use-cases";
 import { Faq } from "@/components/landing/sections/faq";
 import { FinalCta } from "@/components/landing/sections/final-cta";
 import { Footer } from "@/components/landing/sections/footer";
-// import "@/components/landing/landing.css";
+import "@/components/landing/landing.css";
 
 /** Landing page at "/". Its buttons lead to /login (see ROUTES in components/landing/content.ts). */
 export default function Home() {

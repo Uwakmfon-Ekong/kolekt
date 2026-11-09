@@ -1,9 +1,3 @@
-/* ==================================================================
-   Kolekt landing: motion
-   Animations use the individual `translate` / `scale` / `rotate`
-   properties so they combine with Tailwind's rotate-* classes.
-   Everything is switched off under prefers-reduced-motion.
-   ================================================================== */
 
 html {
   scroll-behavior: smooth;
