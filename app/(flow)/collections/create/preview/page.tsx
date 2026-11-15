@@ -2,26 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Icon, { IconName } from "@/components/Icon";
 import Logo from "@/components/Logo";
 import WalletIllustration from "@/components/WalletIllustration";
 import { Button, LinkButton } from "@/components/Button";
 import FlowFooter from "@/components/FlowFooter";
 import { type CollectionDraft, useCreateCollection } from "@/lib/create-collection";
+import { publishCollectionAction } from "@/app/actions/collections";
 
 const DETAILS = "/collections/create/details";
 const CONTRIBUTION = "/collections/create/contribution-type";
 const FIELDS = "/collections/create/contributor-fields";
 const money = (v: string | number) => "₦" + Number(v || 0).toLocaleString("en-NG");
-const slugify = (s: string) => s.toLowerCase().trim().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
-const makeToken = (length: number) => {
-  const chars = "abcdefghjkmnpqrstuvwxyz23456789";
-  const bytes = new Uint8Array(length);
-  if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(bytes);
-  else bytes.forEach((_, i) => { bytes[i] = Math.floor(Math.random() * 256); });
-  return Array.from(bytes, (b) => chars[b % chars.length]).join("");
-};
 const initials = (s: string) => s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
 function fieldIcon(label: string): IconName {
@@ -59,72 +52,38 @@ function validate(d: CollectionDraft) {
 
 export default function PreviewPage() {
   const router = useRouter();
-  const { draft, setPublished, addCollection, collections, user } = useCreateCollection();
+  const { draft, setPublished, user } = useCreateCollection();
   const [issues, setIssues] = useState<ReturnType<typeof validate>>([]);
   const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState("");
 
   const fixed = draft.type === "fixed";
   const target = Number(draft.target) || 0;
   const minimum = Number(draft.minimum) || 0;
   const amount = Number(draft.amount) || 0;
-  const slugBase = useMemo(() => slugify(draft.name) || "my-collection", [draft.name]);
-  const publicSlug = `${slugBase}-${makeToken(5)}`;
 
-  const publish = () => {
+  const publish = async () => {
     const invalid = validate(draft);
     setIssues(invalid);
+    setServerError("");
     if (invalid.length) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     setBusy(true);
-
-    const existingIds = new Set(collections.map((c) => c.id));
-    let id = `klk-${makeToken(8)}`;
-    while (existingIds.has(id)) id = `klk-${makeToken(8)}`;
-
-    const existingSlugs = new Set(collections.map((c) => c.slug).filter(Boolean));
-    let slug = publicSlug;
-    while (existingSlugs.has(slug)) slug = `${slugBase}-${makeToken(5)}`;
-    const existingPublicIds = new Set(collections.map((c) => c.collectionId).filter(Boolean));
-    let collectionId = `KLK-${makeToken(8).toUpperCase()}`;
-    while (existingPublicIds.has(collectionId)) collectionId = `KLK-${makeToken(8).toUpperCase()}`;
-
-    const fullCollection = {
-      id,
-      collectionId,
-      publicationStatus: "ACTIVE" as const,
-      slug,
-      url: `${window.location.host}/c/${slug}`,
-      name: draft.name.trim(),
-      icon: "wallet" as const,
-      image: draft.image,
-      collected: 0,
-      target,
-      status: "Active" as const,
-      due: draft.deadline ? `Due ${dateLabel(draft.deadline)}` : "No deadline",
-      organisation: draft.organisation.trim(),
-      organiserName: user.name,
-      description: draft.description.trim(),
-      contribution: fixed ? `Fixed · ${money(amount)} per person` : "Flexible · contributors choose an amount",
-      contributionType: draft.type!,
-      contributionAmount: fixed ? amount : undefined,
-      minimumContribution: fixed ? undefined : minimum || undefined,
-      deadline: draft.deadline || undefined,
-      allowAboveTarget: draft.allowAboveTarget,
-      contributorFields: [...draft.contributorFields],
-    };
-
-    addCollection(fullCollection);
-    setPublished({
-      id: fullCollection.collectionId,
-      url: `${window.location.origin}/c/${slug}`,
-      slug,
-      name: fullCollection.name,
-      status: "Active",
-      publishedAt: new Date().toISOString(),
-    });
-    router.push("/collections/published");
+    try {
+      const res = await publishCollectionAction({
+        name: draft.name, description: draft.description, organisation: draft.organisation, image: draft.image,
+        type: draft.type!, amount: draft.amount, minimum: draft.minimum, target: draft.target,
+        deadline: draft.deadline, allowAboveTarget: draft.allowAboveTarget, contributorFields: draft.contributorFields,
+      });
+      if (!res.ok) { setServerError(res.error); setBusy(false); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+      setPublished({ id: res.data.publicCode, url: res.data.link, slug: res.data.slug, name: res.data.name, status: "Active", publishedAt: new Date().toISOString() });
+      router.push("/collections/published");
+    } catch {
+      setServerError("We couldn’t reach the server. Check your connection and try again.");
+      setBusy(false);
+    }
   };
 
   const details = [
@@ -155,6 +114,8 @@ export default function PreviewPage() {
           <h1 className="mt-1 text-[28px] font-extrabold tracking-tight">Review Collection</h1>
           <p className="mt-1.5 text-[15px] leading-relaxed text-muted">Check the details below. This is how your collection will appear to contributors.</p>
         </div>
+
+        {serverError && <div role="alert" className="mt-5 rounded-2xl border border-[#C2344D]/30 bg-[#C2344D]/5 p-4 text-sm font-semibold text-[#C2344D]">{serverError}</div>}
 
         {issues.length > 0 && <div role="alert" className="mt-5 rounded-2xl border border-[#C2344D]/30 bg-[#C2344D]/5 p-4 text-sm">
           <p className="font-bold text-[#C2344D]">A few things need your attention</p>
@@ -188,12 +149,12 @@ export default function PreviewPage() {
               <p className="mt-1 text-xs text-muted">Contributors will be asked to provide:</p>
               <ul className="mt-3 grid gap-2 sm:grid-cols-2">{draft.contributorFields.map((field) => <li key={field} className="flex items-center gap-3 rounded-2xl bg-bg px-3.5 py-3 text-sm font-semibold"><span className="grid h-8 w-8 flex-none place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name={fieldIcon(field)} className="h-4 w-4" /></span>{field}<Icon name="check" className="ml-auto h-4 w-4 text-primary" /></li>)}</ul>
             </section>
-            <div><button type="button" disabled className="flex h-14 w-full cursor-not-allowed items-center justify-center rounded-[18px] bg-gradient-to-b from-[#8553E6] to-primary text-base font-bold text-white opacity-90 shadow-cta">{fixed ? `Contribute ${money(amount)}` : "Choose contribution amount"}</button><p className="mt-2 text-center text-xs text-muted">Preview only · payments will be simulated in this prototype</p></div>
+            <div><button type="button" disabled className="flex h-14 w-full cursor-not-allowed items-center justify-center rounded-[18px] bg-gradient-to-b from-[#8553E6] to-primary text-base font-bold text-white opacity-90 shadow-cta">{fixed ? `Contribute ${money(amount)}` : "Choose contribution amount"}</button><p className="mt-2 text-center text-xs text-muted">Preview only · contributors pay securely with Paga</p></div>
           </div>
         </article>
 
         <section className="mt-5 rounded-3xl border border-accent/35 bg-card/80 p-5">
-          <div className="flex items-start gap-3"><span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-white text-primary"><Icon name="shield" className="h-5 w-5" /></span><div><h2 className="text-sm font-extrabold">Payment information</h2><p className="mt-1 text-sm leading-relaxed text-muted">Payments are simulated in this frontend prototype. No real payment will be processed, and you don’t need to provide or display bank account details.</p></div></div>
+          <div className="flex items-start gap-3"><span className="grid h-10 w-10 flex-none place-items-center rounded-xl bg-white text-primary"><Icon name="shield" className="h-5 w-5" /></span><div><h2 className="text-sm font-extrabold">Payments are powered by Paga</h2><p className="mt-1 text-sm leading-relaxed text-muted">Each contributor gets their own one-time account number to transfer to, from any bank app or by USSD. Kolekt confirms every payment with Paga before it counts, so you never need to check screenshots or share your own account details.</p></div></div>
         </section>
 
         <section className="mt-5 rounded-3xl border border-accent/30 bg-white p-4 shadow-soft">

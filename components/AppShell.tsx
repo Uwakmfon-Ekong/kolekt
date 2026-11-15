@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import Icon, { IconName } from "./Icon";
 import Logo from "./Logo";
 import { useApp } from "@/lib/create-collection";
+import { timeAgo } from "@/lib/data";
+import { logoutAction } from "@/app/actions/auth";
 
 const items: { href: string; label: string; icon: IconName }[] = [
   { href: "/dashboard", label: "Home", icon: "home" },
@@ -14,9 +16,19 @@ const items: { href: string; label: string; icon: IconName }[] = [
   { href: "/profile", label: "Profile", icon: "user" },
 ];
 
+const SEEN_KEY = "kolekt-notifications-seen";
+
 function Bell() {
+  const { activity } = useApp();
   const [open, setOpen] = useState(false);
-  const [unread, setUnread] = useState(true);
+  const [seen, setSeen] = useState<string | null>(null);
+  useEffect(() => { try { setSeen(localStorage.getItem(SEEN_KEY) ?? ""); } catch { setSeen(""); } }, []);
+  const unread = seen !== null && activity.length > 0 && activity[0].id !== seen;
+  const markRead = () => {
+    const latest = activity[0]?.id ?? "";
+    setSeen(latest);
+    try { localStorage.setItem(SEEN_KEY, latest); } catch { /* storage unavailable */ }
+  };
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -26,11 +38,6 @@ function Bell() {
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", esc); };
   }, [open]);
-  const items = [
-    { t: "Chidinma Okoro contributed ₦5,000 to Church Building Fund", w: "2 hours ago" },
-    { t: "Departmental Dues is now 94% funded", w: "Yesterday" },
-    { t: "Community Outreach ends in 20 days", w: "2 days ago" },
-  ];
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen((v) => !v)} aria-label={unread ? "Notifications, unread" : "Notifications"} aria-expanded={open} aria-haspopup="true"
@@ -42,16 +49,20 @@ function Bell() {
         <div className="absolute right-0 z-40 mt-2 w-[min(20rem,calc(100vw-2.5rem))] rounded-2xl border border-accent/30 bg-white p-2 shadow-soft">
           <div className="flex items-center justify-between px-3 py-2">
             <p className="text-sm font-bold">Notifications</p>
-            <button onClick={() => setUnread(false)} className="text-xs font-semibold text-primary hover:underline">Mark all read</button>
+            {activity.length > 0 && <button onClick={markRead} className="text-xs font-semibold text-primary hover:underline">Mark all read</button>}
           </div>
-          <ul>
-            {items.map((i) => (
-              <li key={i.t} className="rounded-xl px-3 py-2.5 hover:bg-bg">
-                <p className="text-[13px] font-medium leading-snug">{i.t}</p>
-                <p className="mt-0.5 text-xs text-muted">{i.w}</p>
-              </li>
-            ))}
-          </ul>
+          {activity.length ? (
+            <ul>
+              {activity.map((i) => (
+                <li key={i.id} className="rounded-xl px-3 py-2.5 hover:bg-bg">
+                  <p className="text-[13px] font-medium leading-snug">{i.text}</p>
+                  <p className="mt-0.5 text-xs text-muted">{timeAgo(i.at)}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-3 pb-3 pt-1 text-[13px] text-muted">No contributions yet. They’ll show up here as soon as someone pays.</p>
+          )}
         </div>
       )}
     </div>
@@ -80,11 +91,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </nav>
         <div className="mt-auto flex items-center gap-3 rounded-2xl bg-card p-3">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-accent font-bold text-white">{user.name[0]}</span>
-          <div className="min-w-0 text-sm">
+          <span className="grid h-10 w-10 flex-none place-items-center overflow-hidden rounded-full bg-accent font-bold text-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {user.photo ? <img src={user.photo} alt="" className="h-full w-full object-cover" /> : (user.name[0] || "K").toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1 text-sm">
             <p className="truncate font-semibold">{user.name}</p>
             <p className="truncate text-xs text-muted">{user.email}</p>
           </div>
+          <button type="button" onClick={() => logoutAction()} aria-label="Log out" title="Log out" className="grid h-9 w-9 flex-none place-items-center rounded-xl text-muted transition hover:bg-white hover:text-[#C2344D]">
+            <Icon name="logout" className="h-[18px] w-[18px]" />
+          </button>
         </div>
       </aside>
 

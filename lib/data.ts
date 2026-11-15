@@ -1,3 +1,5 @@
+/** Shapes the organiser screens work with. The server builds them from the database (lib/server/collections.ts). */
+
 export type Collection = {
   id: string;
   name: string;
@@ -10,7 +12,10 @@ export type Collection = {
   organisation?: string;
   description?: string;
   contribution?: string;
+  /** Public link without the protocol, for display: kolekt.app/c/dues-2026-x7k2p */
   url?: string;
+  /** Full public link, for copying and sharing. */
+  link?: string;
   slug?: string;
   image?: string | null;
   organiserName?: string;
@@ -22,32 +27,36 @@ export type Collection = {
   contributorFields?: string[];
   collectionId?: string;
   publicationStatus?: "ACTIVE" | "CLOSED";
+  contributors?: number;
+  createdAt?: string;
 };
 
-export const user = { name: "Adaeze", email: "adaeze@example.com" };
+export type Contribution = {
+  reference: string;
+  name: string;
+  amount: number;
+  paidAt: string;
+  method: string;
+  details: Record<string, string>;
+  flagged: boolean;
+};
 
-export const stats = { totalCollected: 245000, growth: 12 };
+export type Activity = { id: string; text: string; at: string };
 
-export const collections: Collection[] = [
-  {
-    id: "church-building-fund", name: "Church Building Fund", icon: "church", collected: 335000, target: 500000,
-    status: "Active", due: "Due in 5 days", note: "Due in 5 days", organisation: "RCCG Uyo",
-    description: "Let’s build a better place of worship together. Every contribution counts!",
-    contribution: "Fixed · ₦5,000 per person", url: "kolekt.app/c/church-building-fund",
-  },
-  {
-    id: "departmental-dues", name: "Departmental Dues", icon: "school", collected: 282000, target: 300000,
-    status: "Active", due: "Due in 12 days", note: "On track", organisation: "Computer Science Department",
-    description: "Annual departmental dues for the 2026/2027 academic session.",
-    contribution: "Fixed · ₦10,000 per person", url: "kolekt.app/c/departmental-dues",
-  },
-  {
-    id: "community-outreach", name: "Community Outreach", icon: "heart", collected: 84000, target: 200000,
-    status: "Active", due: "Due in 20 days", organisation: "Uyo Youth Network",
-    description: "Funding food and supplies for our quarterly community outreach.",
-    contribution: "Flexible · give what you can", url: "kolekt.app/c/community-outreach",
-  },
-];
+export type AppUser = { name: string; email: string; phone?: string | null; photo?: string | null };
 
-export const naira = (n: number) => "₦" + n.toLocaleString("en-NG");
+export type Stats = { totalCollected: number; thisWeek: number; contributions: number };
+
+export const naira = (n: number) => "₦" + Number(n || 0).toLocaleString("en-NG");
 export const percent = (c: Collection) => (c.target ? Math.round((c.collected / c.target) * 100) : 0);
+
+/** "2 hours ago", "Yesterday", "3 Nov". */
+export function timeAgo(iso: string, now = Date.now()) {
+  const s = Math.max(0, (now - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "Just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} hour${Math.floor(s / 3600) === 1 ? "" : "s"} ago`;
+  if (s < 172800) return "Yesterday";
+  if (s < 604800) return `${Math.floor(s / 86400)} days ago`;
+  return new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short" });
+}

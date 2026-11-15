@@ -6,7 +6,7 @@
 /* Routes: change these if your app uses different paths. */
 export const ROUTES = {
   /** Where "Get started" and "Start a collection" go. */
-  start: "/login",
+  start: "/signup",
   login: "/login",
   signup: "/signup",
 } as const;
@@ -71,7 +71,7 @@ export const STEPS = {
   items: [
     { title: "Create", body: "Name it, set a fixed amount or let people choose, add a deadline. Takes about two minutes, tops." },
     { title: "Share", body: "Drop the link in the group chat or print the QR code. Nobody needs an account to pay." },
-    { title: "Relax", body: "Payments get verified and names tick off by themselves. Nudge the stragglers with one tap." },
+    { title: "Relax", body: "Every payment is verified with Paga and lands on your dashboard with the payer’s name. Share a reminder on WhatsApp in one tap." },
   ],
 };
 
@@ -114,11 +114,11 @@ export const FAQ = {
   items: [
     {
       q: "Do contributors need to create an account?",
-      a: "Nope. They open your link, enter their name (and an ID if you ask for one), and pay by bank transfer. That's the whole thing.",
+      a: "Nope. They open your link, fill in the details you asked for, and get their own one-time account number to transfer to from any bank app, or by USSD. That's the whole thing.",
     },
     {
       q: "How do I know a payment is actually real?",
-      a: "Kolekt verifies every payment automatically before it shows as paid. A screenshot can't fake that.",
+      a: "Payments are powered by Paga. When money lands, Paga notifies Kolekt, and Kolekt double-checks with Paga before it counts. A screenshot can't fake that.",
     },
     {
       q: "Can people pay different amounts?",
@@ -142,8 +142,8 @@ export const FINAL_CTA = {
 };
 
 export const FOOTER = {
-  tagline: "Collect. Track. Stay Transparent.",
-  madeIn: "Made in Akwa Ibom.",
+  tagline: "Collect. Track. Stay Transparent. Payments powered by Paga.",
+  madeIn: "Made in Akwa Ibom · Payments powered by Paga",
 };
 
 /* ---------- Example data shown inside the mockups ---------- */

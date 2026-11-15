@@ -5,11 +5,10 @@ import { Card } from "@/components/Card";
 import { Button, LinkButton } from "@/components/Button";
 import Icon, { IconName } from "@/components/Icon";
 import { useApp } from "@/lib/create-collection";
-import { useRouter } from "next/navigation";
+import { logoutAction } from "@/app/actions/auth";
 import { useState } from "react";
 
 export default function ProfilePage() {
-  const router = useRouter();
   const { user, collections } = useApp();
   const [busy, setBusy] = useState(false);
   const rows: { href: string; icon: IconName; label: string }[] = [
@@ -24,7 +23,7 @@ export default function ProfilePage() {
       <Card className="flex items-center gap-4 p-5">
         <span className="grid h-16 w-16 flex-none place-items-center overflow-hidden rounded-full bg-accent text-2xl font-bold text-white">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {user.photo ? <img src={user.photo} alt="" className="h-full w-full object-cover" /> : user.name[0]}
+          {user.photo ? <img src={user.photo} alt="" className="h-full w-full object-cover" /> : (user.name[0] || "K").toUpperCase()}
         </span>
         <div className="min-w-0"><p className="truncate text-lg font-bold">{user.name}</p><p className="truncate text-sm text-muted">{user.email}</p>{user.phone && <p className="truncate text-sm text-muted">{user.phone}</p>}</div>
       </Card>
@@ -36,7 +35,7 @@ export default function ProfilePage() {
           </Link>
         ))}
       </Card>
-      <Button variant="secondary" loading={busy} loadingText="Logging out…" onClick={() => { setBusy(true); setTimeout(() => router.push("/login"), 700); }}>
+      <Button variant="secondary" loading={busy} loadingText="Logging out…" onClick={async () => { setBusy(true); await logoutAction(); }}>
         <Icon name="logout" className="h-5 w-5" /> Log out
       </Button>
       <LinkButton href="/dashboard" variant="ghost" size="md">Back to dashboard</LinkButton>

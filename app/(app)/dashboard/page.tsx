@@ -6,17 +6,22 @@ import { Card, EmptyState } from "@/components/Card";
 import CollectionCard from "@/components/CollectionCard";
 import { LinkButton } from "@/components/Button";
 import { useApp } from "@/lib/create-collection";
-import { naira, stats } from "@/lib/data";
+import { naira } from "@/lib/data";
+
+function greeting() {
+  const h = Number(new Date().toLocaleString("en-GB", { hour: "numeric", hour12: false, timeZone: "Africa/Lagos" }));
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
 
 export default function DashboardPage() {
-  const { collections, user, closeCollection } = useApp();
+  const { collections, user, closeCollection, stats } = useApp();
   const first = user.name.trim().split(/\s+/)[0] || "there";
   const active = collections.filter((c) => c.status === "Active").length;
 
   return (
     <div className="space-y-7">
       <section>
-        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight md:text-3xl">Good morning, {first} 👋</h1>
+        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight md:text-3xl">{greeting()}, {first} 👋</h1>
         <p className="mt-1.5 text-[15px] text-muted">Here’s your contribution overview.</p>
       </section>
 
@@ -26,9 +31,13 @@ export default function DashboardPage() {
           <span className="relative grid h-10 w-10 place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name="wallet" /></span>
           <p className="relative mt-4 text-[13px] font-semibold text-muted">Total Collected</p>
           <p className="relative mt-1 text-[22px] font-extrabold tracking-tight md:text-3xl">{naira(stats.totalCollected)}</p>
-          <p className="relative mt-2 inline-flex items-center gap-1 rounded-full bg-[#2E9E6B]/12 px-2 py-0.5 text-xs font-bold text-[#23885A]">
-            <Icon name="trend" className="h-3.5 w-3.5" width={2.5} /> +{stats.growth}%
-          </p>
+          {stats.thisWeek > 0 ? (
+            <p className="relative mt-2 inline-flex items-center gap-1 rounded-full bg-[#2E9E6B]/12 px-2 py-0.5 text-xs font-bold text-[#23885A]">
+              <Icon name="trend" className="h-3.5 w-3.5" width={2.5} /> +{naira(stats.thisWeek)} this week
+            </p>
+          ) : (
+            <p className="relative mt-2 text-xs font-medium text-muted">{stats.contributions} contribution{stats.contributions === 1 ? "" : "s"}</p>
+          )}
         </Card>
         <Card tone="tinted" className="relative overflow-hidden p-4 md:p-6">
           <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/30" />

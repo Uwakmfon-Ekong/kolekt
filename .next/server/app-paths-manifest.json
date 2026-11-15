@@ -1,4 +1,9 @@
 {
-  "/page": "app/page.js",
-  "/(auth)/login/page": "app/(auth)/login/page.js"
+  "/(auth)/signup/page": "app/(auth)/signup/page.js",
+  "/(public)/c/[slug]/page": "app/(public)/c/[slug]/page.js",
+  "/receipt/[reference]/page": "app/receipt/[reference]/page.js",
+  "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
+  "/(app)/collections/[id]/page": "app/(app)/collections/[id]/page.js",
+  "/(app)/reports/page": "app/(app)/reports/page.js",
+  "/(app)/profile/page": "app/(app)/profile/page.js"
 }

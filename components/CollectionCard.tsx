@@ -23,7 +23,7 @@ export default function CollectionCard({ c, meta, onClose }: { c: Collection; me
   }, [open]);
 
   const copy = async () => {
-    try { await navigator.clipboard.writeText(`https://${c.url ?? `kolekt.app/c/${c.id}`}`); } catch { /* clipboard unavailable */ }
+    try { await navigator.clipboard.writeText(c.link ?? `https://${c.url}`); } catch { /* clipboard unavailable */ }
     setCopied(true);
     setTimeout(() => { setCopied(false); setOpen(false); }, 900);
   };
@@ -54,9 +54,13 @@ export default function CollectionCard({ c, meta, onClose }: { c: Collection; me
           {c.target > 0 && <p className="text-sm font-bold text-primary">{pct}% collected</p>}
         </div>
 
-        <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-accent/40" role="progressbar" aria-valuenow={Math.min(pct, 100)} aria-valuemin={0} aria-valuemax={100} aria-label={`${c.name} progress`}>
-          <div className="h-full rounded-full bg-gradient-to-r from-[#9468EE] to-primary transition-[width] duration-700" style={{ width: `${Math.min(pct, 100)}%` }} />
-        </div>
+        {c.target > 0 ? (
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-accent/40" role="progressbar" aria-valuenow={Math.min(pct, 100)} aria-valuemin={0} aria-valuemax={100} aria-label={`${c.name} progress`}>
+            <div className="h-full rounded-full bg-gradient-to-r from-[#9468EE] to-primary transition-[width] duration-700" style={{ width: `${Math.min(pct, 100)}%` }} />
+          </div>
+        ) : (
+          <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-muted"><Icon name="users" className="h-3.5 w-3.5 text-primary" /> {c.contributors ?? 0} contribution{c.contributors === 1 ? "" : "s"}</p>
+        )}
       </Link>
 
       <div ref={ref} className="absolute right-3 top-3">

@@ -19,7 +19,7 @@ export default function PublishedPage() {
     );
   }
 
-  const link = published.url.replace("https://", "");
+  const link = published.url.replace(/^https?:\/\//, "");
   const copy = async () => {
     try { await navigator.clipboard.writeText(published.url); } catch { /* unavailable */ }
     setCopied(true); setTimeout(() => setCopied(false), 1500);

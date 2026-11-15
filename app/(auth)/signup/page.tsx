@@ -9,7 +9,8 @@ import Checkbox from "@/components/Checkbox";
 import Field from "@/components/Field";
 import Icon from "@/components/Icon";
 import Logo from "@/components/Logo";
-import { useApp } from "@/lib/create-collection";
+import { signupAction } from "@/app/actions/auth";
+import { resizeImage } from "@/lib/image";
 
 type Form = { name: string; email: string; phone: string; pw: string; cpw: string; terms: boolean };
 type Errors = Partial<Record<keyof Form, string>>;
@@ -28,12 +29,12 @@ const validate = (f: Form): Errors => {
 
 export default function SignupPage() {
   const router = useRouter();
-  const { setUser } = useApp();
   const [f, setF] = useState<Form>({ name: "", email: "", phone: "", pw: "", cpw: "", terms: false });
   const [errors, setErrors] = useState<Errors>({});
   const [photo, setPhoto] = useState<string | null>(null);
   const [photoErr, setPhotoErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => {
@@ -45,25 +46,36 @@ export default function SignupPage() {
   const onFile = (file?: File) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) return setPhotoErr("Please choose an image file.");
-    if (file.size > 5 * 1024 * 1024) return setPhotoErr("Image must be under 5 MB.");
+    if (file.size > 8 * 1024 * 1024) return setPhotoErr("Image must be under 8 MB.");
     setPhotoErr("");
-    const r = new FileReader();
-    r.onload = () => setPhoto(String(r.result));
-    r.readAsDataURL(file);
+    resizeImage(file, 320).then(setPhoto).catch(() => setPhotoErr("We couldn’t read that image. Try another one."));
   };
 
-  const submit = (ev: React.FormEvent) => {
+  const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
+    setFormError("");
     const e = validate(f);
     setErrors(e);
     const first = (["name", "email", "phone", "pw", "cpw"] as const).find((k) => e[k]);
     if (first) return document.getElementById(first)?.focus();
     if (e.terms) return;
     setBusy(true);
-    setTimeout(() => {
-      setUser({ name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), photo });
-      router.push("/dashboard");
-    }, 1400);
+    try {
+      const res = await signupAction({ name: f.name, email: f.email, phone: f.phone, password: f.pw, photo });
+      if (!res.ok) {
+        const map: Record<string, keyof Form> = { name: "name", email: "email", phone: "phone", password: "pw" };
+        const field = res.field ? map[res.field] : undefined;
+        if (field) { setErrors((er) => ({ ...er, [field]: res.error })); document.getElementById(field)?.focus(); }
+        else setFormError(res.error);
+        setBusy(false);
+        return;
+      }
+      router.replace("/dashboard");
+      router.refresh();
+    } catch {
+      setFormError("Something went wrong. Check your connection and try again.");
+      setBusy(false);
+    }
   };
 
   const hasLen = f.pw.length >= 8;
@@ -121,6 +133,7 @@ export default function SignupPage() {
             </Checkbox>
           </div>
 
+          {formError && <p role="alert" className="rounded-xl bg-[#C2344D]/8 px-3.5 py-2.5 text-[13px] font-medium text-[#C2344D]">{formError}</p>}
           <Button type="submit" loading={busy} loadingText="Creating account…">Create Account</Button>
         </form>
         <p className="mt-5 text-center text-[14.5px] text-muted">Already have an account? <Link href="/login" className="font-semibold text-primary hover:underline">Login</Link></p>

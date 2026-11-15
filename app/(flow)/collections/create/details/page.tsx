@@ -9,6 +9,7 @@ import StepHeader from "@/components/StepHeader";
 import { Button } from "@/components/Button";
 import FlowFooter from "@/components/FlowFooter";
 import { CollectionDraft, useCreateCollection } from "@/lib/create-collection";
+import { resizeImage } from "@/lib/image";
 
 type Errors = Partial<Record<"name" | "description" | "organisation", string>>;
 
@@ -43,11 +44,9 @@ export default function DetailsPage() {
   const onFile = (f?: File) => {
     if (!f) return;
     if (!f.type.startsWith("image/")) return setImgError("Please choose an image file.");
-    if (f.size > 5 * 1024 * 1024) return setImgError("Image must be under 5 MB.");
+    if (f.size > 10 * 1024 * 1024) return setImgError("Image must be under 10 MB.");
     setImgError("");
-    const r = new FileReader();
-    r.onload = () => update({ image: String(r.result) });
-    r.readAsDataURL(f);
+    resizeImage(f, 1280, 0.8).then((image) => update({ image })).catch(() => setImgError("We couldn’t read that image. Try another one."));
   };
 
   const next = () => {
