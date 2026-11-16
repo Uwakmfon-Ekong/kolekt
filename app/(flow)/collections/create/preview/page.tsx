@@ -76,6 +76,7 @@ export default function PreviewPage() {
         name: draft.name, description: draft.description, organisation: draft.organisation, image: draft.image,
         type: draft.type!, amount: draft.amount, minimum: draft.minimum, target: draft.target,
         deadline: draft.deadline, allowAboveTarget: draft.allowAboveTarget, contributorFields: draft.contributorFields,
+        allowPartPayments: fixed && draft.allowPartPayments, optionalFields: draft.optionalFields ?? [],
       });
       if (!res.ok) { setServerError(res.error); setBusy(false); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
       setPublished({ id: res.data.publicCode, url: res.data.link, slug: res.data.slug, name: res.data.name, status: "Active", publishedAt: new Date().toISOString() });
@@ -88,7 +89,7 @@ export default function PreviewPage() {
 
   const details = [
     { label: "Contribution type", value: fixed ? "Fixed amount" : "Flexible amount" },
-    ...(fixed ? [{ label: "Required contribution", value: money(amount) }] : minimum ? [{ label: "Minimum contribution", value: money(minimum) }] : []),
+    ...(fixed ? [{ label: "Required contribution", value: money(amount) }, { label: "Part payments", value: draft.allowPartPayments ? "Allowed" : "Not allowed" }] : minimum ? [{ label: "Minimum contribution", value: money(minimum) }] : []),
     { label: "Target amount", value: target ? money(target) : "No target set" },
     { label: "Deadline", value: dateLabel(draft.deadline) },
   ];
@@ -147,7 +148,7 @@ export default function PreviewPage() {
             <section aria-labelledby="required-fields-heading">
               <h3 id="required-fields-heading" className="text-sm font-extrabold">Contributor information required</h3>
               <p className="mt-1 text-xs text-muted">Contributors will be asked to provide:</p>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">{draft.contributorFields.map((field) => <li key={field} className="flex items-center gap-3 rounded-2xl bg-bg px-3.5 py-3 text-sm font-semibold"><span className="grid h-8 w-8 flex-none place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name={fieldIcon(field)} className="h-4 w-4" /></span>{field}<Icon name="check" className="ml-auto h-4 w-4 text-primary" /></li>)}</ul>
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2">{draft.contributorFields.map((field) => <li key={field} className="flex items-center gap-3 rounded-2xl bg-bg px-3.5 py-3 text-sm font-semibold"><span className="grid h-8 w-8 flex-none place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name={fieldIcon(field)} className="h-4 w-4" /></span>{field}{(draft.optionalFields ?? []).includes(field) ? <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-muted">Optional</span> : <Icon name="check" className="ml-auto h-4 w-4 text-primary" />}</li>)}</ul>
             </section>
             <div><button type="button" disabled className="flex h-14 w-full cursor-not-allowed items-center justify-center rounded-[18px] bg-gradient-to-b from-[#8553E6] to-primary text-base font-bold text-white opacity-90 shadow-cta">{fixed ? `Contribute ${money(amount)}` : "Choose contribution amount"}</button><p className="mt-2 text-center text-xs text-muted">Preview only · contributors pay securely with Paga</p></div>
           </div>

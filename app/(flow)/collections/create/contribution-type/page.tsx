@@ -132,6 +132,16 @@ export default function ContributionTypePage() {
           <TypeCard selected={draft.type === "fixed"} onSelect={() => pick("fixed")} title="Fixed Amount" desc="Everyone pays the same amount."
             icon={<span className="text-[26px] font-extrabold leading-none">₦</span>}>
             <MoneyField id="amount" label="Contribution Amount" placeholder="Enter amount" value={draft.amount} onChange={(v) => change({ amount: v })} error={errors.amount} />
+            <div className="flex items-center justify-between gap-4 rounded-2xl bg-bg p-4">
+              <div className="min-w-0">
+                <p id="part-l" className="text-sm font-semibold">Allow part payments</p>
+                <p className="mt-0.5 text-xs text-muted">People can pay in instalments. Kolekt tracks each person’s balance.</p>
+              </div>
+              <button type="button" role="switch" aria-checked={draft.allowPartPayments} aria-labelledby="part-l" onClick={() => update({ allowPartPayments: !draft.allowPartPayments })}
+                className={`relative h-8 w-14 flex-none rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${draft.allowPartPayments ? "bg-primary" : "bg-accent/60"}`}>
+                <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${draft.allowPartPayments ? "translate-x-6" : ""}`} />
+              </button>
+            </div>
           </TypeCard>
 
           <TypeCard selected={draft.type === "flexible"} onSelect={() => pick("flexible")} title="Flexible Amount" desc="Contributors choose how much to give."

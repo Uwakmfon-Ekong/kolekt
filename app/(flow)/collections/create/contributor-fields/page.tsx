@@ -18,6 +18,18 @@ export default function ContributorFieldsPage() {
   const { draft, update } = useApp();
   const fields = draft.contributorFields.includes(LOCKED) ? draft.contributorFields : [LOCKED, ...draft.contributorFields];
   const custom = fields.filter((f) => !presets.includes(f));
+  const optional = new Set((draft.optionalFields ?? []).filter((f) => fields.includes(f) && f !== LOCKED));
+  const toggleOptional = (f: string) => {
+    const s = new Set(optional);
+    s.has(f) ? s.delete(f) : s.add(f);
+    update({ optionalFields: Array.from(s) });
+  };
+  const reqPill = (f: string) => (
+    <button type="button" onClick={(e) => { e.stopPropagation(); toggleOptional(f); }} aria-pressed={!optional.has(f)} aria-label={`${f}: ${optional.has(f) ? "optional" : "required"}. Tap to change.`}
+      className={`flex-none rounded-full px-2.5 py-1 text-[11px] font-bold transition ${optional.has(f) ? "bg-card text-muted hover:bg-accent/30" : "bg-primary/10 text-primary hover:bg-primary/15"}`}>
+      {optional.has(f) ? "Optional" : "Required"}
+    </button>
+  );
   const [label, setLabel] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,7 +52,7 @@ export default function ContributorFieldsPage() {
   };
   const remove = (f: string) => update({ contributorFields: fields.filter((x) => x !== f) });
   const next = () => {
-    update({ contributorFields: fields });
+    update({ contributorFields: fields, optionalFields: Array.from(optional) });
     setBusy(true);
     setTimeout(() => router.push("/collections/create/preview"), 500);
   };
@@ -55,7 +67,7 @@ export default function ContributorFieldsPage() {
 
         <div className="mt-7">
           <h2 className="text-2xl font-extrabold tracking-tight">Contributor Fields</h2>
-          <p className="mt-1.5 text-[15px] text-muted">Choose what contributors must provide when they give.</p>
+          <p className="mt-1.5 text-[15px] text-muted">Choose what contributors provide when they give. Tap <b className="font-semibold text-ink">Required</b> on a field to make it optional.</p>
         </div>
 
         <ul className="mt-6 space-y-2.5" role="group" aria-label="Contributor information">
@@ -63,13 +75,13 @@ export default function ContributorFieldsPage() {
             const on = fields.includes(p);
             const locked = p === LOCKED;
             return (
-              <li key={p}>
+              <li key={p} className={`flex items-center gap-2 rounded-2xl border-2 pr-3 transition ${on ? "border-primary bg-white shadow-soft" : "border-card bg-card/60 hover:border-accent"}`}>
                 <button type="button" role="checkbox" aria-checked={on} aria-disabled={locked} onClick={() => toggle(p)}
-                  className={`flex w-full items-center gap-3.5 rounded-2xl border-2 px-4 py-3.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${on ? "border-primary bg-white shadow-soft" : "border-card bg-card/60 hover:border-accent"} ${locked ? "cursor-default" : ""}`}>
-                  <span className="flex-1 text-[15px] font-semibold">{p}</span>
-                  {locked && <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">Required</span>}
+                  className={`flex min-w-0 flex-1 items-center gap-3.5 rounded-2xl py-3.5 pl-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${locked ? "cursor-default" : ""}`}>
                   <span className={`grid h-6 w-6 flex-none place-items-center rounded-full border-2 transition ${on ? "border-primary bg-primary text-white" : "border-accent bg-white"}`}>{on && <Icon name="check" className="h-3.5 w-3.5" width={3.4} />}</span>
+                  <span className="flex-1 truncate text-[15px] font-semibold">{p}</span>
                 </button>
+                {locked ? <span className="flex-none rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">Always required</span> : on && reqPill(p)}
               </li>
             );
           })}
@@ -87,6 +99,7 @@ export default function ContributorFieldsPage() {
               {custom.map((f) => (
                 <li key={f} className="flex items-center gap-1.5 rounded-full bg-card py-1.5 pl-3.5 pr-1.5 text-sm font-semibold">
                   {f}
+                  {reqPill(f)}
                   <button type="button" onClick={() => remove(f)} aria-label={`Remove ${f}`} className="grid h-6 w-6 place-items-center rounded-full text-muted hover:bg-white hover:text-[#C2344D]"><Icon name="x" className="h-3.5 w-3.5" width={2.6} /></button>
                 </li>
               ))}

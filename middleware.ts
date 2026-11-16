@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * layouts then check the session against the database, so a stale or forged cookie
  * still ends up at /login.
  */
-const PROTECTED = ["/dashboard", "/collections", "/reports", "/profile"];
+const PROTECTED = ["/dashboard", "/collections", "/reports", "/profile", "/notifications"];
 const AUTH_PAGES = ["/login", "/signup"];
 
 export function middleware(req: NextRequest) {
@@ -28,5 +28,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/collections/:path*", "/reports/:path*", "/profile/:path*", "/login", "/signup"],
+  matcher: ["/dashboard/:path*", "/collections/:path*", "/reports/:path*", "/profile/:path*", "/notifications/:path*", "/login", "/signup"],
 };

@@ -29,6 +29,9 @@ export type Collection = {
   publicationStatus?: "ACTIVE" | "CLOSED";
   contributors?: number;
   createdAt?: string;
+  showPublicNames?: boolean;
+  allowPartPayments?: boolean;
+  optionalFields?: string[];
 };
 
 export type Contribution = {
@@ -41,7 +44,7 @@ export type Contribution = {
   flagged: boolean;
 };
 
-export type Activity = { id: string; text: string; at: string };
+export type Activity = { id: string; text: string; at: string; href?: string };
 
 export type PayoutAccount = { bankName: string; accountNumber: string; accountName: string };
 export type AppUser = { name: string; email: string; phone?: string | null; photo?: string | null; payout?: PayoutAccount | null };
@@ -63,7 +66,40 @@ export type Balance = { collected: number; paidOut: number; processing: number; 
 /** 0123456789 -> ••••••6789 */
 export const maskAccount = (n: string) => "••••••" + n.slice(-4);
 
-export type Stats = { totalCollected: number; thisWeek: number; contributions: number; paidOut: number };
+export type Member = {
+  id: string;
+  name: string;
+  memberId: string | null;
+  phone: string | null;
+  paid: number;
+  status: "paid" | "part" | "unpaid";
+  lastPaid: string | null;
+};
+export type MemberStatus = { members: Member[]; notOnList: { name: string; paid: number; lastPaid: string }[] };
+
+export type Stats = { totalCollected: number; thisWeek: number; contributions: number; paidOut: number; outstanding: number; contributors: number };
+
+export type PaymentLine = { reference: string; amount: number; paidAt: string; method: string; flagged: boolean };
+/** One person in a collection: everyone who has paid, plus class-list members who haven't. */
+export type Contributor = {
+  key: string;
+  name: string;
+  status: "paid" | "part" | "unpaid";
+  paid: number;
+  expected: number | null;
+  outstanding: number;
+  details: Record<string, string>;
+  memberId: string | null;
+  phone: string | null;
+  onList: boolean;
+  payments: PaymentLine[];
+  lastPaid: string | null;
+};
+export type ContributorSummary = { people: number; paid: number; part: number; unpaid: number; collected: number; outstanding: number; contributors: number };
+
+export type Notice = { id: string; kind: "payment" | "flag" | "payout_ok" | "payout_failed" | "payout_processing"; title: string; text: string; at: string; href: string };
+
+export const methodLabel = (m: string) => (m.includes("USSD") ? "USSD" : m.includes("CARD") ? "Card" : m.includes("WALLET") || m.includes("REQUEST_MONEY") ? "Paga wallet" : "Bank transfer");
 
 export const naira = (n: number) => "₦" + Number(n || 0).toLocaleString("en-NG");
 export const percent = (c: Collection) => (c.target ? Math.round((c.collected / c.target) * 100) : 0);

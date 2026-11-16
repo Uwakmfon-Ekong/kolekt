@@ -63,12 +63,16 @@ Paga ──▶ POST /api/webhooks/paga-payout       x-paga-hash checked; status 
 |---|---|
 | Notification with a forged hash | Rejected with 401; the payment stays pending |
 | Same notification delivered twice | Acknowledged both times, counted once |
-| Same student pays a fixed collection twice (even typing `csc 2021 014` vs `CSC/2021/014`) | Second payment is flagged "Paid twice" for the organiser |
+| Same student tries to pay a fixed collection again after paying in full (even typing `csc 2021 014` vs `CSC/2021/014`) | Refused at checkout ("already paid the full amount") |
+| Two open payment requests from the same student both get paid | The extra payment is flagged "Paid twice" for the organiser |
+| Part payment larger than the student's remaining balance | Refused ("You have ₦3,500 left to pay") |
+| Deleting a collection that has received money | Refused; it can only be closed, so no payment record is lost |
 | Browser lands on a success page | Never marks anything paid; only server-side verification does |
 | Receipt or payment page for an unknown reference | 404 |
 | Withdrawing more than the collection's balance | Refused |
 | Saving a payout account with the wrong password, or an account Paga can't find | Refused |
 | Payout notification with a missing or wrong hash | Rejected with 401 |
+| Class list with a header row, serial numbers or a repeated person | Header and numbers ignored; the repeat is skipped |
 
 ## Features
 
@@ -76,8 +80,16 @@ Paga ──▶ POST /api/webhooks/paga-payout       x-paga-hash checked; status 
 - Real accounts: sign up, log in, log out. Passwords are hashed with scrypt; sessions are random tokens in httpOnly cookies (only a SHA-256 of each token is stored).
 - Dashboard with total collected, this week's total and active collections; notifications for new payments.
 - Fixed or flexible collections, with optional minimum, target, deadline and "allow above target".
-- Custom contributor fields (matric number, department, level, or your own).
+- **Part payments** on fixed collections: people pay in instalments, Kolekt tracks each person's balance, caps each payment at what they still owe, and shows "Paid so far / Balance" on every receipt.
+- Contributor fields (matric number, department, level, or your own), each **required or optional**. Level is a dropdown and Department suggests common department names.
+- **Contributors page:** one row per person (paid, part paid, not paid from the class list) with filters, search, a profile with every payment and receipt, a WhatsApp reminder showing their balance, and **Excel (.xlsx) or CSV export**.
+- Collection overview: total collected, unique contributors, fully/part paid and outstanding balance. Dashboard totals include unique contributors and what's still owed.
+- **Notifications page** for verified payments, possible repeat payments and withdrawals (paid, processing or failed), with unread markers.
+- Delete a collection before anyone has paid (afterwards it can only be closed).
 - Collection page with every verified contribution, receipts, **CSV export**, WhatsApp sharing, a **QR code**, edit, close and reopen.
+- **Class list (paid / unpaid):** paste or upload a list of names, matric numbers and phone numbers. Kolekt ticks people off as Paga confirms each payment, matching by ID even when it's typed differently (`csc 2021 014` vs `CSC/2021/014`) and falling back to the name. Unpaid, Paid and "Not on list" tabs, with search.
+- **WhatsApp reminders:** one tap creates a group message listing who still owes, with the link and deadline. People with a phone number on the list get their own "Remind" button.
+- **Live public progress:** the payment page shows "X of Y have paid" and recent contributors (first name and last initial, never amounts), and refreshes by itself. Organisers can hide the names.
 - **Payouts:** a Paga-verified bank account (password required to change it) and one-tap withdrawals with a payout history.
 - Reports across all collections, including what's been paid out.
 
@@ -136,7 +148,7 @@ Paga's docs leave a few details open. Each is a small change in `lib/server/paga
 app/
 ├── page.tsx                      landing page (components/landing/)
 ├── (auth)/login, signup          real authentication (app/actions/auth.ts)
-├── (app)/                        organiser screens: dashboard, collections, reports, profile
+├── (app)/                        organiser screens: dashboard, collections (+ contributors), notifications, reports, profile
 ├── (flow)/collections/create/…   4-step create wizard → publish (app/actions/collections.ts)
 ├── (public)/c/[slug]/            public collection page → checkout (app/actions/checkout.ts)
 ├── pay/[reference]/              account number + live payment status
@@ -145,7 +157,7 @@ app/
     ├── webhooks/paga/            Paga payment notification endpoint
     ├── webhooks/paga-payout/     Paga deposit-to-bank (payout) notification endpoint
     ├── pay/[reference]/status/   payment status polling (re-checks Paga if needed)
-    ├── collections/[id]/report/  CSV export
+    ├── collections/[id]/report/  CSV and Excel exports (payments or contributors)
     ├── auth/signout/             clears the session
     └── dev/simulate-transfer/    demo-mode transfer simulator
 lib/
@@ -159,6 +171,5 @@ Tech: Next.js 15 (App Router, server actions), TypeScript, Tailwind CSS, Postgre
 
 ## Roadmap
 
-- Paid / unpaid lists from a class or member list
-- One-tap and scheduled reminders (WhatsApp, SMS)
+- Scheduled reminders (SMS and WhatsApp Business API)
 - Email verification and password reset

@@ -102,6 +102,26 @@ create table if not exists payouts (
 );
 create index if not exists payouts_collection_idx on payouts(collection_id);
 
+-- The organiser's class / member list, for paid-vs-unpaid tracking.
+create table if not exists collection_members (
+  id uuid primary key default gen_random_uuid(),
+  collection_id uuid not null references collections(id) on delete cascade,
+  full_name text not null,
+  member_id text,
+  phone text,
+  member_key text not null,
+  name_key text not null,
+  created_at timestamptz not null default now(),
+  unique (collection_id, member_key)
+);
+create index if not exists collection_members_collection_idx on collection_members(collection_id);
+
+-- Whether the public page lists contributors' first names (amounts are never shown).
+alter table collections add column if not exists show_public_names boolean not null default true;
+-- Part payments on fixed collections, and fields the organiser marked optional.
+alter table collections add column if not exists allow_part_payments boolean not null default false;
+alter table collections add column if not exists optional_fields jsonb not null default '[]'::jsonb;
+
 -- Only used in demo mode: stands in for Paga's ledger so the verification step can be "queried".
 create table if not exists mock_paga_payments (
   id uuid primary key default gen_random_uuid(),

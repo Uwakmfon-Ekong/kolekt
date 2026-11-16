@@ -19,7 +19,9 @@ export type CollectionDraft = {
   target: string; // digits only (optional)
   deadline: string; // YYYY-MM-DD (optional)
   allowAboveTarget: boolean;
+  allowPartPayments: boolean; // fixed only: people can pay in instalments
   contributorFields: string[];
+  optionalFields: string[]; // selected fields contributors may leave empty
 };
 
 export type PublishedCollection = {
@@ -33,8 +35,8 @@ export type PublishedCollection = {
 
 const empty: CollectionDraft = {
   name: "", description: "", organisation: "", image: null,
-  type: null, amount: "", minimum: "", target: "", deadline: "", allowAboveTarget: false,
-  contributorFields: ["Full Name", "Email Address", "Phone Number"],
+  type: null, amount: "", minimum: "", target: "", deadline: "", allowAboveTarget: false, allowPartPayments: false,
+  contributorFields: ["Full Name", "Email Address", "Phone Number"], optionalFields: [],
 };
 
 /* ------------------------------------------------------------------ */
@@ -139,7 +141,7 @@ export function DataProvider({
 const noData: DataCtx = {
   user: { name: "", email: "" },
   collections: [],
-  stats: { totalCollected: 0, thisWeek: 0, contributions: 0, paidOut: 0 },
+  stats: { totalCollected: 0, thisWeek: 0, contributions: 0, paidOut: 0, outstanding: 0, contributors: 0 },
   activity: [],
   closeCollection: async () => {},
   updateCollection: async () => null,

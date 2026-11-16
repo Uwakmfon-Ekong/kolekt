@@ -9,18 +9,26 @@ import Icon from "@/components/Icon";
 import WalletIllustration from "@/components/WalletIllustration";
 import { LinkButton } from "@/components/Button";
 import { useApp } from "@/lib/create-collection";
-import { naira, percent, timeAgo, type Balance, type Contribution, type PayoutView } from "@/lib/data";
+import { naira, percent, timeAgo, type Balance, type Contribution, type ContributorSummary, type MemberStatus, type PayoutView } from "@/lib/data";
+import { useRouter } from "next/navigation";
+import MembersCard from "@/components/MembersCard";
+import { setPublicNamesAction } from "@/app/actions/members";
 import WithdrawCard from "@/components/WithdrawCard";
-import { reopenCollectionAction } from "@/app/actions/collections";
+import { deleteCollectionAction, reopenCollectionAction } from "@/app/actions/collections";
 
 const methodLabel = (m: string) => (m.includes("USSD") ? "USSD" : m.includes("CARD") ? "Card" : m.includes("WALLET") || m.includes("REQUEST_MONEY") ? "Paga wallet" : "Bank transfer");
 
-export default function CollectionView({ id, contributions, qr, balance, payouts }: {
-  id: string; contributions: Contribution[]; qr: string | null; balance: Balance; payouts: PayoutView[];
+export default function CollectionView({ id, contributions, qr, balance, payouts, members, summary }: {
+  id: string; contributions: Contribution[]; qr: string | null; balance: Balance; payouts: PayoutView[]; members: MemberStatus; summary: ContributorSummary | null;
 }) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const { collections, closeCollection, updateCollection, refresh, user } = useApp();
   const c = collections.find((x) => x.id === id);
   const [showAll, setShowAll] = useState(false);
+  const [publicNames, setPublicNames] = useState(c?.showPublicNames !== false);
+  const [savingNames, setSavingNames] = useState(false);
   const [reopening, setReopening] = useState(false);
 
   const [editing, setEditing] = useState(false);
@@ -64,6 +72,26 @@ export default function CollectionView({ id, contributions, qr, balance, payouts
     if (!window.confirm("Close this collection? People won’t be able to pay into it any more. You can reopen it later.")) return;
     setClosing(true); await closeCollection(c.id); setClosing(false);
   };
+  const canDelete = contributions.length === 0 && payouts.length === 0;
+  const remove = async () => {
+    if (!window.confirm(`Delete “${c.name}”? Its link will stop working and its class list will be removed. This can’t be undone.`)) return;
+    setDeleting(true); setDeleteError("");
+    const res = await deleteCollectionAction(c.id);
+    if (!res.ok) { setDeleteError(res.error); setDeleting(false); return; }
+    router.replace("/collections");
+    router.refresh();
+  };
+  const fixed = c.contributionType === "fixed";
+  const tiles = summary ? [
+    { icon: "wallet" as const, label: "Total collected", value: naira(c.collected), sub: c.target ? `${pct}% of ${naira(c.target)}` : `${contributions.length} payment${contributions.length === 1 ? "" : "s"}` },
+    { icon: "users" as const, label: "Contributors", value: String(summary.contributors), sub: summary.people > summary.contributors ? `of ${summary.people} people` : "unique people" },
+    fixed
+      ? { icon: "check" as const, label: "Fully / part paid", value: `${summary.paid} / ${summary.part}`, sub: summary.unpaid ? `${summary.unpaid} not paid` : "No one owing on your list" }
+      : { icon: "check" as const, label: "Not paid yet", value: String(summary.unpaid), sub: summary.people > summary.contributors ? "from your class list" : "Add a class list to track" },
+    fixed
+      ? { icon: "clock" as const, label: "Outstanding", value: naira(summary.outstanding), sub: "still owed" }
+      : { icon: "trend" as const, label: "Average", value: naira(summary.contributors ? Math.round(summary.collected / summary.contributors) : 0), sub: "per contributor" },
+  ] : [];
   const reopen = async () => { setReopening(true); await reopenCollectionAction(c.id); refresh(); setReopening(false); };
   const copy = async () => {
     try { await navigator.clipboard.writeText(url); } catch { /* unavailable */ }
@@ -73,6 +101,28 @@ export default function CollectionView({ id, contributions, qr, balance, payouts
   return (
     <div className="space-y-5">
       <Link href="/collections" className="inline-flex items-center gap-2 text-sm font-semibold text-muted hover:text-primary"><Icon name="back" className="h-4 w-4" /> Collections</Link>
+
+      {tiles.length > 0 && (
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Overview">
+          {tiles.map((t) => (
+            <Card key={t.label} tone="tinted" className="p-4">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name={t.icon} className="h-[18px] w-[18px]" /></span>
+              <p className="mt-3 text-xs font-semibold text-muted">{t.label}</p>
+              <p className="mt-0.5 truncate text-xl font-extrabold tracking-tight">{t.value}</p>
+              <p className="mt-0.5 truncate text-[11px] font-medium text-muted">{t.sub}</p>
+            </Card>
+          ))}
+        </section>
+      )}
+
+      <Link href={`/collections/${c.id}/contributors`} className="flex items-center gap-3 rounded-3xl border border-accent/40 bg-white p-4 shadow-soft transition hover:border-primary">
+        <span className="grid h-11 w-11 flex-none place-items-center rounded-2xl bg-primary text-white"><Icon name="users" className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold">Contributors</span>
+          <span className="block truncate text-xs text-muted">Each person’s details, balance and payment history · export to Excel</span>
+        </span>
+        <Icon name="chevron" className="h-5 w-5 flex-none text-primary" />
+      </Link>
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
         <div className="space-y-5">
@@ -112,6 +162,8 @@ export default function CollectionView({ id, contributions, qr, balance, payouts
             </div>
           </Card>
 
+          <MembersCard collection={c} status={members} />
+
           <Card className="p-5 md:p-7">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-base font-bold">Recent contributions</h2>
@@ -121,6 +173,9 @@ export default function CollectionView({ id, contributions, qr, balance, payouts
                   <a href={`/api/collections/${c.id}/report`} className="inline-flex items-center gap-1.5 rounded-xl bg-card px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-accent/30">
                     <Icon name="chart" className="h-3.5 w-3.5" /> Export CSV
                   </a>
+                )}
+                {contributions.length > 0 && (
+                  <Link href={`/collections/${c.id}/contributors`} className="text-xs font-bold text-primary hover:underline">View all</Link>
                 )}
               </div>
             </div>
@@ -192,6 +247,11 @@ export default function CollectionView({ id, contributions, qr, balance, payouts
                 </div>
               </div>
             )}
+            <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-card p-3">
+              <input type="checkbox" className="mt-0.5 h-4 w-4 flex-none accent-primary" checked={publicNames} disabled={savingNames}
+                onChange={async (e) => { const v = e.target.checked; setPublicNames(v); setSavingNames(true); await setPublicNamesAction(c.id, v); setSavingNames(false); refresh(); }} />
+              <span className="text-xs leading-relaxed text-muted"><b className="text-ink">Show who has contributed</b> on the public page (first names only, never amounts). It builds trust and nudges others to pay.</span>
+            </label>
           </Card>
 
           {!done ? (
@@ -199,6 +259,15 @@ export default function CollectionView({ id, contributions, qr, balance, payouts
           ) : c.publicationStatus === "CLOSED" ? (
             <Button variant="secondary" onClick={reopen} loading={reopening} loadingText="Reopening…">Reopen collection</Button>
           ) : null}
+          {canDelete && (
+            <div>
+              <button onClick={remove} disabled={deleting} className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold text-[#C2344D] transition hover:bg-[#C2344D]/8 disabled:opacity-60">
+                <Icon name="trash" className="h-4 w-4" /> {deleting ? "Deleting…" : "Delete collection"}
+              </button>
+              <p className="mt-1 text-center text-[11px] text-muted">Only possible before anyone has paid.</p>
+              {deleteError && <p role="alert" className="mt-2 rounded-xl bg-[#C2344D]/8 p-3 text-xs font-medium text-[#C2344D]">{deleteError}</p>}
+            </div>
+          )}
         </div>
       </div>
     </div>

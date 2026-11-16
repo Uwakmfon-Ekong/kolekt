@@ -22,7 +22,9 @@ const DraftSchema = z.object({
   target: digits,
   deadline: z.string().trim().regex(/^(\d{4}-\d{2}-\d{2})?$/, "Choose a valid deadline.").default(""),
   allowAboveTarget: z.boolean().default(false),
+  allowPartPayments: z.boolean().default(false),
   contributorFields: z.array(z.string().trim().min(1).max(40)).min(1).max(12),
+  optionalFields: z.array(z.string().trim().max(40)).max(12).default([]),
 });
 
 export type PublishedInfo = { id: string; publicCode: string; slug: string; link: string; name: string };
@@ -45,6 +47,7 @@ export async function publishCollectionAction(draft: z.input<typeof DraftSchema>
   if (d.image && !d.image.startsWith("data:image/")) return { ok: false, error: "The cover must be an image." };
 
   const fieldsList = Array.from(new Set(["Full Name", ...d.contributorFields]));
+  const optional = d.optionalFields.filter((f) => f !== "Full Name" && fieldsList.includes(f));
   const base = slugify(d.name) || "collection";
 
   // Retry on the (very unlikely) chance a random slug or code is already taken.
@@ -55,8 +58,9 @@ export async function publishCollectionAction(draft: z.input<typeof DraftSchema>
       const row = await one<{ id: string }>(
         `insert into collections
            (organiser_id, public_code, slug, title, description, organisation, cover_image, collection_type,
-            fixed_amount, min_amount, target_amount, allow_above_target, deadline, contributor_fields)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            fixed_amount, min_amount, target_amount, allow_above_target, deadline, contributor_fields,
+            allow_part_payments, optional_fields)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
          returning id`,
         [
           me.id, publicCode, slug, d.name, d.description, d.organisation, d.image ?? null, d.type,
@@ -66,6 +70,8 @@ export async function publishCollectionAction(draft: z.input<typeof DraftSchema>
           d.allowAboveTarget,
           d.deadline || null,
           JSON.stringify(fieldsList),
+          d.type === "fixed" && d.allowPartPayments,
+          JSON.stringify(optional),
         ],
       );
       revalidatePath("/", "layout");
@@ -108,6 +114,24 @@ export async function reopenCollectionAction(id: string): Promise<ActionResult> 
   const me = await requireOrganiser();
   const rows = await q("update collections set status = 'active' where id = $1 and organiser_id = $2 returning id", [id, me.id]);
   if (!rows.length) return { ok: false, error: "Collection not found." };
+  revalidatePath("/", "layout");
+  return { ok: true, data: undefined };
+}
+
+/** Delete a collection. Only allowed before any money has been received, so no payment record is ever lost. */
+export async function deleteCollectionAction(id: string): Promise<ActionResult> {
+  const me = await requireOrganiser();
+  if (!/^[0-9a-f-]{36}$/i.test(String(id))) return { ok: false, error: "Collection not found." };
+  const c = await one<{ paid: number; payouts: number }>(
+    `select (select count(*)::int from transactions t where t.collection_id = c.id and t.status = 'successful') as paid,
+            (select count(*)::int from payouts p where p.collection_id = c.id) as payouts
+       from collections c where c.id = $1 and c.organiser_id = $2`,
+    [id, me.id],
+  );
+  if (!c) return { ok: false, error: "Collection not found." };
+  if (c.paid > 0 || c.payouts > 0)
+    return { ok: false, error: "This collection has received payments, so it can’t be deleted (the records must be kept). Close it instead." };
+  await q("delete from collections where id = $1 and organiser_id = $2", [id, me.id]);
   revalidatePath("/", "layout");
   return { ok: true, data: undefined };
 }

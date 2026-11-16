@@ -21,6 +21,10 @@ export type TxView = {
   organisation: string;
   organiser_name: string;
   public_code: string;
+  collection_type: string;
+  fixed_amount: number | null;
+  allow_part_payments: boolean;
+  paid_to_date: number | null;
 };
 
 /** Public view of one payment, by its unguessable reference. */
@@ -29,7 +33,11 @@ export async function getTransaction(reference: string) {
   const t = await one<TxView>(
     `select t.reference, t.status, t.amount, t.amount_to_pay, t.payer_name, t.payer_details, t.payment_instructions,
             t.payment_method, t.provider_reference, t.provider_mode, t.verified_at, t.expires_at, t.created_at,
-            c.title, c.slug, c.organisation, c.public_code, o.full_name as organiser_name
+            c.title, c.slug, c.organisation, c.public_code, o.full_name as organiser_name,
+            c.collection_type, c.fixed_amount, c.allow_part_payments,
+            (select sum(x.amount) from transactions x
+              where x.collection_id = t.collection_id and x.payer_key = t.payer_key and x.status = 'successful'
+                and x.verified_at <= coalesce(t.verified_at, now())) as paid_to_date
        from transactions t
        join collections c on c.id = t.collection_id
        join organisers o on o.id = c.organiser_id

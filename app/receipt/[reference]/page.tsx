@@ -43,6 +43,12 @@ export default async function ReceiptPage({ params }: { params: Promise<{ refere
     ["Collected by", t.organisation || t.organiser_name],
     ["Date", fmt(t.verified_at)],
     ["Method", t.payment_method?.includes("USSD") ? "USSD via Paga" : "Bank transfer via Paga"],
+    ...(t.collection_type === "fixed" && t.allow_part_payments && t.fixed_amount
+      ? ([
+          ["Paid so far", `${naira(Number(t.paid_to_date ?? t.amount))} of ${naira(Number(t.fixed_amount))}`],
+          ["Balance", Number(t.paid_to_date ?? 0) >= Number(t.fixed_amount) ? "Fully paid ✓" : naira(Number(t.fixed_amount) - Number(t.paid_to_date ?? t.amount))],
+        ] as [string, string][])
+      : []),
     ["Kolekt reference", t.reference],
     ...(t.provider_reference ? [["Paga reference", t.provider_reference] as [string, string]] : []),
   ];

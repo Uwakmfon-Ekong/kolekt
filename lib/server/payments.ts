@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { getDb, q } from "./db";
 import { pagaMode, requestPayment, verifyPayment, type PaymentInstructions } from "./paga";
-import { fields, getCollectionBySlug, isOpen } from "./collections";
+import { fields, getCollectionBySlug, isOpen, optionalFields } from "./collections";
 import { isEmail, isPhone, normalizeIdentifier } from "./utils";
 
 export class UserError extends Error {}
@@ -15,6 +15,8 @@ function newReference() {
 const MIN_AMOUNT = 100;
 const MAX_AMOUNT = 5_000_000;
 const REQUEST_TTL_HOURS = 24;
+
+const naira = (n: number) => "₦" + Number(n).toLocaleString("en-NG");
 
 const find = (values: Record<string, string>, re: RegExp) =>
   Object.entries(values).find(([k, v]) => re.test(k) && v.trim())?.[1]?.trim() ?? "";
@@ -38,7 +40,8 @@ export async function startContribution(input: {
   const wanted = fields(c);
   const values: Record<string, string> = {};
   for (const f of wanted) values[f] = String(input.values[f] ?? "").trim().replace(/\s+/g, " ").slice(0, 120);
-  const missing = wanted.filter((f) => !values[f]);
+  const optional = new Set(optionalFields(c));
+  const missing = wanted.filter((f) => !values[f] && !optional.has(f));
   if (missing.length) throw new UserError(`Please complete: ${missing.join(", ")}.`);
 
   const name = values["Full Name"] || find(values, /name/i);
@@ -54,7 +57,28 @@ export async function startContribution(input: {
 
   let amount: number;
   if (c.collection_type === "fixed") {
-    amount = Number(c.fixed_amount);
+    const fixed = Number(c.fixed_amount);
+    // What this person has already paid into this collection (verified payments only).
+    const [prior] = await q<{ paid: number | null }>(
+      "select sum(amount) as paid from transactions where collection_id = $1 and payer_key = $2 and status = 'successful'",
+      [c.id, payerKey],
+    );
+    let left = Math.max(0, fixed - Number(prior?.paid ?? 0));
+    if (left <= 0) {
+      // Identified by an ID, phone or email: they really have paid. Identified only by a name:
+      // it could be a different person with the same name, so let it through (a real repeat is flagged).
+      if (id || phone || email) throw new UserError(`Our records show you've already paid the full ${naira(fixed)} for this collection. Check with the organiser if that's wrong.`);
+      left = fixed;
+    }
+    if (c.allow_part_payments && input.amount !== undefined && input.amount !== null && String(input.amount) !== "") {
+      amount = Math.round(Number(input.amount) * 100) / 100;
+      const floor = Math.min(MIN_AMOUNT, left);
+      if (!Number.isFinite(amount) || amount < floor) throw new UserError(`The smallest part payment is ${naira(floor)}.`);
+      if (amount > left) throw new UserError(left < fixed ? `You have ${naira(left)} left to pay.` : `The full amount is ${naira(fixed)}.`);
+    } else {
+      // Without part payments, people pay what they still owe (the full amount the first time).
+      amount = left;
+    }
   } else {
     amount = Math.round(Number(input.amount) * 100) / 100;
     if (!Number.isFinite(amount) || amount < MIN_AMOUNT) throw new UserError(`The minimum contribution is ₦${MIN_AMOUNT}.`);
@@ -123,7 +147,7 @@ export type SettleResult =
   | { outcome: "not_paid"; detail: string }
   | { outcome: "not_found" };
 
-type TxLock = { id: string; status: string; collection_id: string; payer_key: string; collection_type: string; created_at: string };
+type TxLock = { id: string; status: string; collection_id: string; payer_key: string; collection_type: string; fixed_amount: number | null; amount: number; created_at: string };
 
 /**
  * Mark a transaction successful ONLY after Paga's ledger confirms the money.
@@ -145,7 +169,7 @@ export async function settleTransaction(
   const db = await getDb();
   return db.tx(async (tx) => {
     const [t] = await tx.query<TxLock>(
-      `select t.id, t.status, t.collection_id, t.payer_key, t.created_at, c.collection_type
+      `select t.id, t.status, t.collection_id, t.payer_key, t.created_at, t.amount, c.collection_type, c.fixed_amount
          from transactions t join collections c on c.id = t.collection_id
         where t.reference = $1
         for update of t`,
@@ -154,15 +178,17 @@ export async function settleTransaction(
     if (!t) return { outcome: "not_found" } as const;
     if (t.status !== "pending") return { outcome: "already_final", status: t.status } as const;
 
-    // On a fixed collection, a second payment from the same person is flagged for the organiser.
+    // On a fixed collection, a payment that takes someone past the fixed amount is flagged
+    // for the organiser (e.g. they paid twice). Part payments that add up to it are fine.
     let review: "none" | "duplicate" = "none";
     if (t.collection_type === "fixed") {
-      const [prior] = await tx.query<{ n: number }>(
-        `select count(*)::int as n from transactions
+      const [prior] = await tx.query<{ paid: number | null }>(
+        `select sum(amount) as paid from transactions
           where collection_id = $1 and payer_key = $2 and status = 'successful' and id <> $3`,
         [t.collection_id, t.payer_key, t.id],
       );
-      if ((prior?.n ?? 0) > 0) review = "duplicate";
+      const before = Number(prior?.paid ?? 0);
+      if (before > 0 && before + Number(t.amount) > Number(t.fixed_amount) + 0.001) review = "duplicate";
     }
 
     await tx.query(

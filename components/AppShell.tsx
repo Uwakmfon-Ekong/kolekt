@@ -8,6 +8,7 @@ import Logo from "./Logo";
 import { useApp } from "@/lib/create-collection";
 import { timeAgo } from "@/lib/data";
 import { logoutAction } from "@/app/actions/auth";
+import { NOTICES_SEEN_KEY, readSeen, writeSeen } from "@/lib/notices-seen";
 
 const items: { href: string; label: string; icon: IconName }[] = [
   { href: "/dashboard", label: "Home", icon: "home" },
@@ -16,19 +17,21 @@ const items: { href: string; label: string; icon: IconName }[] = [
   { href: "/profile", label: "Profile", icon: "user" },
 ];
 
-const SEEN_KEY = "kolekt-notifications-seen";
 
 function Bell() {
   const { activity } = useApp();
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState<string | null>(null);
-  useEffect(() => { try { setSeen(localStorage.getItem(SEEN_KEY) ?? ""); } catch { setSeen(""); } }, []);
-  const unread = seen !== null && activity.length > 0 && activity[0].id !== seen;
-  const markRead = () => {
-    const latest = activity[0]?.id ?? "";
-    setSeen(latest);
-    try { localStorage.setItem(SEEN_KEY, latest); } catch { /* storage unavailable */ }
-  };
+  useEffect(() => {
+    setSeen(readSeen());
+    const sync = (e: StorageEvent | Event) => { if (!("key" in e) || e.key === NOTICES_SEEN_KEY) setSeen(readSeen()); };
+    window.addEventListener("storage", sync);
+    window.addEventListener("kolekt-notices-seen", sync);
+    return () => { window.removeEventListener("storage", sync); window.removeEventListener("kolekt-notices-seen", sync); };
+  }, []);
+  const unreadCount = seen === null ? 0 : activity.filter((a) => a.at > seen).length;
+  const unread = unreadCount > 0;
+  const markRead = () => setSeen(writeSeen(activity[0]?.at));
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -40,7 +43,7 @@ function Bell() {
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen((v) => !v)} aria-label={unread ? "Notifications, unread" : "Notifications"} aria-expanded={open} aria-haspopup="true"
+      <button onClick={() => setOpen((v) => !v)} aria-label={unread ? `Notifications, ${unreadCount} unread` : "Notifications"} aria-expanded={open} aria-haspopup="true"
         className="relative grid h-11 w-11 place-items-center rounded-2xl bg-card text-ink transition hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
         <Icon name="bell" className="h-5 w-5" />
         {unread && <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full border-2 border-card bg-primary" />}
@@ -49,20 +52,26 @@ function Bell() {
         <div className="absolute right-0 z-40 mt-2 w-[min(20rem,calc(100vw-2.5rem))] rounded-2xl border border-accent/30 bg-white p-2 shadow-soft">
           <div className="flex items-center justify-between px-3 py-2">
             <p className="text-sm font-bold">Notifications</p>
-            {activity.length > 0 && <button onClick={markRead} className="text-xs font-semibold text-primary hover:underline">Mark all read</button>}
+            {unread && <button onClick={markRead} className="text-xs font-semibold text-primary hover:underline">Mark all read</button>}
           </div>
           {activity.length ? (
             <ul>
               {activity.map((i) => (
-                <li key={i.id} className="rounded-xl px-3 py-2.5 hover:bg-bg">
-                  <p className="text-[13px] font-medium leading-snug">{i.text}</p>
-                  <p className="mt-0.5 text-xs text-muted">{timeAgo(i.at)}</p>
+                <li key={i.id}>
+                  <Link href={i.href ?? "/notifications"} onClick={() => setOpen(false)} className="flex gap-2.5 rounded-xl px-3 py-2.5 hover:bg-bg">
+                    <span className={`mt-1.5 h-2 w-2 flex-none rounded-full ${seen !== null && i.at > seen ? "bg-primary" : "bg-transparent"}`} />
+                    <span>
+                      <span className="block text-[13px] font-medium leading-snug">{i.text}</span>
+                      <span className="mt-0.5 block text-xs text-muted">{timeAgo(i.at)}</span>
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="px-3 pb-3 pt-1 text-[13px] text-muted">No contributions yet. They’ll show up here as soon as someone pays.</p>
           )}
+          <Link href="/notifications" onClick={() => setOpen(false)} className="mt-1 block rounded-xl border-t border-card px-3 py-2.5 text-center text-xs font-bold text-primary hover:bg-bg">View all notifications</Link>
         </div>
       )}
     </div>

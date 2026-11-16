@@ -25,7 +25,7 @@ export default function DashboardPage() {
         <p className="mt-1.5 text-[15px] text-muted">Here’s your contribution overview.</p>
       </section>
 
-      <section className="grid grid-cols-2 gap-3.5 md:gap-5" aria-label="Summary">
+      <section className="grid grid-cols-2 gap-3.5 md:gap-5 xl:grid-cols-4" aria-label="Summary">
         <Card tone="tinted" className="relative overflow-hidden p-4 md:p-6">
           <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/30" />
           <span className="relative grid h-10 w-10 place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name="wallet" /></span>
@@ -44,7 +44,21 @@ export default function DashboardPage() {
           <span className="relative grid h-10 w-10 place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name="layers" /></span>
           <p className="relative mt-4 text-[13px] font-semibold text-muted">Active Collections</p>
           <p className="relative mt-1 text-[22px] font-extrabold tracking-tight md:text-3xl">{active}</p>
-          <p className="relative mt-2 text-xs font-medium text-muted">{active} active collection{active === 1 ? "" : "s"}</p>
+          <p className="relative mt-2 text-xs font-medium text-muted">{collections.length} in total</p>
+        </Card>
+        <Card tone="tinted" className="relative overflow-hidden p-4 md:p-6">
+          <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/30" />
+          <span className="relative grid h-10 w-10 place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name="users" /></span>
+          <p className="relative mt-4 text-[13px] font-semibold text-muted">Contributors</p>
+          <p className="relative mt-1 text-[22px] font-extrabold tracking-tight md:text-3xl">{stats.contributors}</p>
+          <p className="relative mt-2 text-xs font-medium text-muted">unique people who paid</p>
+        </Card>
+        <Card tone="tinted" className="relative overflow-hidden p-4 md:p-6">
+          <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/30" />
+          <span className="relative grid h-10 w-10 place-items-center rounded-xl bg-white text-primary shadow-sm"><Icon name="clock" /></span>
+          <p className="relative mt-4 text-[13px] font-semibold text-muted">Outstanding</p>
+          <p className="relative mt-1 text-[22px] font-extrabold tracking-tight md:text-3xl">{naira(stats.outstanding)}</p>
+          <p className="relative mt-2 text-xs font-medium text-muted">still owed on open fixed collections</p>
         </Card>
       </section>
 

@@ -2,6 +2,8 @@ import "server-only";
 import { one, q } from "./db";
 import { dateStr } from "./utils";
 import type { Activity, Collection, Contribution, Stats } from "../data";
+import { organiserOutstanding } from "./contributors";
+import { listNotices } from "./notifications";
 
 export type CollectionRow = {
   id: string;
@@ -20,6 +22,9 @@ export type CollectionRow = {
   deadline: string | Date | null;
   contributor_fields: string[] | string;
   status: "active" | "closed";
+  show_public_names?: boolean;
+  allow_part_payments?: boolean;
+  optional_fields?: string[] | string | null;
   created_at: string | Date;
   organiser_name?: string;
   collected?: number;
@@ -53,6 +58,12 @@ export const fields = (c: Pick<CollectionRow, "contributor_fields">): string[] =
   return Array.isArray(f) && f.length ? f.map(String) : ["Full Name"];
 };
 
+/** Fields the contributor may leave empty. Full Name is always required. */
+export const optionalFields = (c: Pick<CollectionRow, "optional_fields">): string[] => {
+  const f = typeof c.optional_fields === "string" ? JSON.parse(c.optional_fields) : c.optional_fields;
+  return Array.isArray(f) ? f.map(String).filter((x) => x !== "Full Name") : [];
+};
+
 export function toCollection(c: CollectionRow, baseUrl: string): Collection {
   const deadline = dateStr(c.deadline);
   const open = isOpen(c);
@@ -79,7 +90,7 @@ export function toCollection(c: CollectionRow, baseUrl: string): Collection {
     note: open ? (target && collected >= target ? "Target reached 🎉" : due) : undefined,
     organisation: c.organisation,
     description: c.description,
-    contribution: fixed ? `Fixed · ${naira(Number(c.fixed_amount))} per person` : "Flexible · contributors choose an amount",
+    contribution: fixed ? `Fixed · ${naira(Number(c.fixed_amount))} per person${c.allow_part_payments ? " (part payments allowed)" : ""}` : "Flexible · contributors choose an amount",
     url: link.replace(/^https?:\/\//, ""),
     link,
     slug: c.slug,
@@ -95,6 +106,9 @@ export function toCollection(c: CollectionRow, baseUrl: string): Collection {
     publicationStatus: c.status === "active" ? "ACTIVE" : "CLOSED",
     contributors: Number(c.contributors ?? 0),
     createdAt: new Date(c.created_at).toISOString(),
+    showPublicNames: c.show_public_names !== false,
+    allowPartPayments: fixed && Boolean(c.allow_part_payments),
+    optionalFields: optionalFields(c),
   };
 }
 
@@ -160,20 +174,11 @@ export async function organiserStats(organiserId: string): Promise<Stats> {
     [organiserId],
   );
   const p = await one<{ out: number | null }>("select sum(amount) as out from payouts where organiser_id = $1 and status = 'successful'", [organiserId]);
-  return { totalCollected: Number(r?.total ?? 0), thisWeek: Number(r?.week ?? 0), contributions: r?.n ?? 0, paidOut: Number(p?.out ?? 0) };
+  const o = await organiserOutstanding(organiserId);
+  return { totalCollected: Number(r?.total ?? 0), thisWeek: Number(r?.week ?? 0), contributions: r?.n ?? 0, paidOut: Number(p?.out ?? 0), ...o };
 }
 
 export async function recentActivity(organiserId: string): Promise<Activity[]> {
-  const rows = await q<{ reference: string; payer_name: string; amount: number; title: string; verified_at: string | Date }>(
-    `select t.reference, t.payer_name, t.amount, c.title, t.verified_at
-       from transactions t join collections c on c.id = t.collection_id
-      where c.organiser_id = $1 and t.status = 'successful'
-      order by t.verified_at desc limit 6`,
-    [organiserId],
-  );
-  return rows.map((r) => ({
-    id: r.reference,
-    text: `${r.payer_name} contributed ${naira(Number(r.amount))} to ${r.title}`,
-    at: new Date(r.verified_at).toISOString(),
-  }));
+  const notices = await listNotices(organiserId, 6);
+  return notices.map((n) => ({ id: n.id, text: n.text, at: n.at, href: n.href }));
 }
