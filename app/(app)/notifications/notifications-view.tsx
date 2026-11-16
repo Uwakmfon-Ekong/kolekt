@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, EmptyState } from "@/components/Card";
 import Icon, { type IconName } from "@/components/Icon";
 import { timeAgo, type Notice } from "@/lib/data";
@@ -31,7 +31,12 @@ export default function NotificationsView({ notices }: { notices: Notice[] }) {
   const [tab, setTab] = useState<Tab>("all");
   // What was unread when the page opened stays highlighted; opening the page marks everything read.
   const [seenAtOpen, setSeenAtOpen] = useState<string | null>(null);
-  useEffect(() => { setSeenAtOpen(readSeen()); writeSeen(notices[0]?.at); }, [notices]);
+  const firstSeen = useRef<string | null>(null);
+  useEffect(() => {
+    // Read once per visit (refreshes and React's dev double-run must not reset it), then mark all read.
+    if (firstSeen.current === null) { firstSeen.current = readSeen(); setSeenAtOpen(firstSeen.current); }
+    writeSeen(notices[0]?.at);
+  }, [notices]);
   // New payments arrive while the page is open.
   useEffect(() => {
     const id = setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 20000);

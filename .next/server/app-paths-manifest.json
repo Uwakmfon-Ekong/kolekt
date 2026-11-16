@@ -1,8 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
-  "/(flow)/collections/create/details/page": "app/(flow)/collections/create/details/page.js",
-  "/(flow)/collections/create/contribution-type/page": "app/(flow)/collections/create/contribution-type/page.js",
-  "/(flow)/collections/create/contributor-fields/page": "app/(flow)/collections/create/contributor-fields/page.js",
-  "/(flow)/collections/create/preview/page": "app/(flow)/collections/create/preview/page.js"
-}
