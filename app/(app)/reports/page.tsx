@@ -6,9 +6,8 @@ import { useApp } from "@/lib/create-collection";
 import { naira, percent } from "@/lib/data";
 
 export default function ReportsPage() {
-  const { collections } = useApp();
+  const { collections, stats } = useApp();
   const total = collections.reduce((s, c) => s + c.collected, 0);
-  const targets = collections.reduce((s, c) => s + c.target, 0);
 
   return (
     <div className="space-y-6">
@@ -21,7 +20,7 @@ export default function ReportsPage() {
         <>
           <div className="grid grid-cols-2 gap-3.5 md:gap-5">
             <Card tone="tinted" className="p-5"><p className="text-xs font-semibold text-muted">Total collected</p><p className="mt-1 text-2xl font-extrabold tracking-tight">{naira(total)}</p></Card>
-            <Card tone="tinted" className="p-5"><p className="text-xs font-semibold text-muted">Combined targets</p><p className="mt-1 text-2xl font-extrabold tracking-tight">{naira(targets)}</p></Card>
+            <Card tone="tinted" className="p-5"><p className="text-xs font-semibold text-muted">Paid out to your bank</p><p className="mt-1 text-2xl font-extrabold tracking-tight">{naira(stats.paidOut)}</p></Card>
           </div>
           <Card className="p-5 md:p-7">
             <h2 className="mb-4 text-base font-bold">Progress by collection</h2>

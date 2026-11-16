@@ -74,6 +74,32 @@ create table if not exists payment_events (
   received_at timestamptz not null default now()
 );
 
+-- Where an organiser's money is paid out (verified with Paga before it's saved).
+alter table organisers add column if not exists payout_bank_uuid text;
+alter table organisers add column if not exists payout_bank_name text;
+alter table organisers add column if not exists payout_account_number text;
+alter table organisers add column if not exists payout_account_name text;
+
+-- Withdrawals from a collection to the organiser's bank account (Paga Business API depositToBank).
+create table if not exists payouts (
+  id uuid primary key default gen_random_uuid(),
+  organiser_id uuid not null references organisers(id) on delete cascade,
+  collection_id uuid not null references collections(id) on delete cascade,
+  reference text not null unique,
+  amount numeric(14,2) not null,
+  fee numeric(14,2),
+  status text not null default 'processing' check (status in ('processing','successful','failed')),
+  bank_name text not null,
+  account_number text not null,
+  account_name text not null,
+  provider_transaction_id text,
+  provider_mode text not null default 'mock',
+  message text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists payouts_collection_idx on payouts(collection_id);
+
 -- Only used in demo mode: stands in for Paga's ledger so the verification step can be "queried".
 create table if not exists mock_paga_payments (
   id uuid primary key default gen_random_uuid(),

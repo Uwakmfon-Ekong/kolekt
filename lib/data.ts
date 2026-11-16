@@ -43,9 +43,27 @@ export type Contribution = {
 
 export type Activity = { id: string; text: string; at: string };
 
-export type AppUser = { name: string; email: string; phone?: string | null; photo?: string | null };
+export type PayoutAccount = { bankName: string; accountNumber: string; accountName: string };
+export type AppUser = { name: string; email: string; phone?: string | null; photo?: string | null; payout?: PayoutAccount | null };
 
-export type Stats = { totalCollected: number; thisWeek: number; contributions: number };
+export type PayoutView = {
+  reference: string;
+  amount: number;
+  fee: number;
+  status: "processing" | "successful" | "failed";
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  message: string | null;
+  createdAt: string;
+};
+
+export type Balance = { collected: number; paidOut: number; processing: number; available: number };
+
+/** 0123456789 -> ••••••6789 */
+export const maskAccount = (n: string) => "••••••" + n.slice(-4);
+
+export type Stats = { totalCollected: number; thisWeek: number; contributions: number; paidOut: number };
 
 export const naira = (n: number) => "₦" + Number(n || 0).toLocaleString("en-NG");
 export const percent = (c: Collection) => (c.target ? Math.round((c.collected / c.target) * 100) : 0);

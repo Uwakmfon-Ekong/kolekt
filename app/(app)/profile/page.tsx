@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Card } from "@/components/Card";
+import PayoutAccountCard from "@/components/PayoutAccountCard";
 import { Button, LinkButton } from "@/components/Button";
 import Icon, { IconName } from "@/components/Icon";
 import { useApp } from "@/lib/create-collection";
@@ -27,6 +28,7 @@ export default function ProfilePage() {
         </span>
         <div className="min-w-0"><p className="truncate text-lg font-bold">{user.name}</p><p className="truncate text-sm text-muted">{user.email}</p>{user.phone && <p className="truncate text-sm text-muted">{user.phone}</p>}</div>
       </Card>
+      <PayoutAccountCard account={user.payout} />
       <Card className="divide-y divide-card">
         {rows.map((r) => (
           <Link key={r.href} href={r.href} className="flex items-center gap-3 px-5 py-4 text-[15px] font-semibold transition hover:bg-bg first:rounded-t-[28px] last:rounded-b-[28px]">

@@ -16,6 +16,9 @@ export type Organiser = {
   email: string;
   phone: string | null;
   photo: string | null;
+  payout_bank_name: string | null;
+  payout_account_number: string | null;
+  payout_account_name: string | null;
 };
 
 export async function hashPassword(password: string) {
@@ -64,7 +67,7 @@ export async function getOrganiser(): Promise<Organiser | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return one<Organiser>(
-    `select o.id, o.full_name, o.email, o.phone, o.photo
+    `select o.id, o.full_name, o.email, o.phone, o.photo, o.payout_bank_name, o.payout_account_number, o.payout_account_name
        from sessions s join organisers o on o.id = s.organiser_id
       where s.token_hash = $1 and s.expires_at > now()`,
     [sha256(token)],

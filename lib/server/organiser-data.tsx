@@ -15,7 +15,15 @@ export async function OrganiserData({ children }: { children: React.ReactNode })
   ]);
   return (
     <DataProvider
-      user={{ name: me.full_name, email: me.email, phone: me.phone, photo: me.photo }}
+      user={{
+        name: me.full_name,
+        email: me.email,
+        phone: me.phone,
+        photo: me.photo,
+        payout: me.payout_account_number
+          ? { bankName: me.payout_bank_name ?? "", accountNumber: me.payout_account_number, accountName: me.payout_account_name ?? "" }
+          : null,
+      }}
       collections={collections}
       stats={stats}
       activity={activity}

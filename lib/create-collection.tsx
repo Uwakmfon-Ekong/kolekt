@@ -139,7 +139,7 @@ export function DataProvider({
 const noData: DataCtx = {
   user: { name: "", email: "" },
   collections: [],
-  stats: { totalCollected: 0, thisWeek: 0, contributions: 0 },
+  stats: { totalCollected: 0, thisWeek: 0, contributions: 0, paidOut: 0 },
   activity: [],
   closeCollection: async () => {},
   updateCollection: async () => null,

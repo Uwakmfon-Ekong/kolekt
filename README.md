@@ -12,10 +12,18 @@ Built for the **Tech Ignite '26 Shipathon: Build With Paga** · Made in Akwa Ibo
 2. **Share.** Kolekt gives the collection a public link and QR code, ready for WhatsApp.
 3. **Pay.** A contributor opens the link, fills in the details and gets **their own one-time Paga account number** to transfer to from any bank app (or by USSD). No account, no app.
 4. **Verify.** When the money lands, Paga notifies Kolekt. Kolekt checks the notification's signature, confirms the payment with Paga's ledger, and only then marks it paid. The contributor gets a receipt; the organiser sees the name, amount and time on their dashboard immediately.
+5. **Withdraw.** The organiser saves a bank account (Paga confirms the account name) and withdraws what they've collected straight to it.
 
 ## Paga integration
 
-Kolekt uses the **Paga Collect API** (`lib/server/paga.ts`).
+Kolekt uses two Paga APIs:
+
+| API | Used for | Code |
+|---|---|---|
+| **Collect API** | Receiving contributions: one-time account numbers, payment notifications, ledger checks | `lib/server/paga.ts` |
+| **Business REST API** | Paying organisers: bank list, account-name check, deposit to bank, payout status | `lib/server/paga-business.ts` |
+
+### Receiving money (Collect API)
 
 ```
 Contributor submits the form
@@ -35,6 +43,20 @@ The payment page polls /api/pay/:ref/status. If a notification is ever lost,
 the poll re-checks Paga directly, so nobody is stuck on "waiting".
 ```
 
+### Paying out (Business REST API)
+
+```
+Organiser picks a bank and types an account number
+  └─▶ getBanks + validateDepositToBank      Paga returns the real account holder's name
+  └─▶ organiser confirms with their password  the server re-checks the account with Paga, then saves it
+
+Organiser withdraws from a collection
+  └─▶ amount reserved under a row lock       can never pay out more than was collected, even with two tabs
+  └─▶ depositToBank (with statusCallbackUrl)
+Paga ──▶ POST /api/webhooks/paga-payout       x-paga-hash checked; status set to Paid or Failed
+       (or "Check" in the app → getOperationStatus)
+```
+
 **Tested safety behaviour**
 
 | Scenario | Result |
@@ -44,6 +66,9 @@ the poll re-checks Paga directly, so nobody is stuck on "waiting".
 | Same student pays a fixed collection twice (even typing `csc 2021 014` vs `CSC/2021/014`) | Second payment is flagged "Paid twice" for the organiser |
 | Browser lands on a success page | Never marks anything paid; only server-side verification does |
 | Receipt or payment page for an unknown reference | 404 |
+| Withdrawing more than the collection's balance | Refused |
+| Saving a payout account with the wrong password, or an account Paga can't find | Refused |
+| Payout notification with a missing or wrong hash | Rejected with 401 |
 
 ## Features
 
@@ -53,7 +78,8 @@ the poll re-checks Paga directly, so nobody is stuck on "waiting".
 - Fixed or flexible collections, with optional minimum, target, deadline and "allow above target".
 - Custom contributor fields (matric number, department, level, or your own).
 - Collection page with every verified contribution, receipts, **CSV export**, WhatsApp sharing, a **QR code**, edit, close and reopen.
-- Reports across all collections.
+- **Payouts:** a Paga-verified bank account (password required to change it) and one-tap withdrawals with a payout history.
+- Reports across all collections, including what's been paid out.
 
 **Contributors**
 - No account and no app: name and details, then transfer.
@@ -85,6 +111,7 @@ With no configuration, Kolekt runs in **demo mode**:
    PAGA_ENV=sandbox
    APP_URL=https://your-app.vercel.app
    ```
+   For payouts, also add the Business API credentials (`PAGA_BUSINESS_PUBLIC_KEY`, `PAGA_BUSINESS_PASSWORD`, `PAGA_BUSINESS_HASH_KEY`). Paga asks you to whitelist your server's IP address for the Business API.
 4. Restart the app. The demo banner disappears and payments go to Paga's sandbox. Pay a generated account number with Paga's **Bank Transfer Simulator**: https://qa-developer-portal.paga.com/simulate/inbound-bank-deposit
 
 <details>
@@ -115,13 +142,14 @@ app/
 ├── pay/[reference]/              account number + live payment status
 ├── receipt/[reference]/          verified receipt
 └── api/
-    ├── webhooks/paga/            Paga notification endpoint
+    ├── webhooks/paga/            Paga payment notification endpoint
+    ├── webhooks/paga-payout/     Paga deposit-to-bank (payout) notification endpoint
     ├── pay/[reference]/status/   payment status polling (re-checks Paga if needed)
     ├── collections/[id]/report/  CSV export
     ├── auth/signout/             clears the session
     └── dev/simulate-transfer/    demo-mode transfer simulator
 lib/
-├── server/                       server-only: db, schema, auth, paga, payments, collections, transactions
+├── server/                       server-only: db, schema, auth, paga, paga-business, payments, payouts, collections
 ├── create-collection.tsx         client state: wizard draft (browser) + organiser data (from the server)
 └── data.ts                       shared types and formatters
 middleware.ts                     sends signed-out visitors to /login
@@ -133,5 +161,4 @@ Tech: Next.js 15 (App Router, server actions), TypeScript, Tailwind CSS, Postgre
 
 - Paid / unpaid lists from a class or member list
 - One-tap and scheduled reminders (WhatsApp, SMS)
-- Payouts to the organiser's bank account through Paga's Business API
 - Email verification and password reset

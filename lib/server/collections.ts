@@ -159,7 +159,8 @@ export async function organiserStats(organiserId: string): Promise<Stats> {
       where c.organiser_id = $1 and t.status = 'successful'`,
     [organiserId],
   );
-  return { totalCollected: Number(r?.total ?? 0), thisWeek: Number(r?.week ?? 0), contributions: r?.n ?? 0 };
+  const p = await one<{ out: number | null }>("select sum(amount) as out from payouts where organiser_id = $1 and status = 'successful'", [organiserId]);
+  return { totalCollected: Number(r?.total ?? 0), thisWeek: Number(r?.week ?? 0), contributions: r?.n ?? 0, paidOut: Number(p?.out ?? 0) };
 }
 
 export async function recentActivity(organiserId: string): Promise<Activity[]> {

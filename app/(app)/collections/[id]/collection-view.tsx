@@ -9,13 +9,16 @@ import Icon from "@/components/Icon";
 import WalletIllustration from "@/components/WalletIllustration";
 import { LinkButton } from "@/components/Button";
 import { useApp } from "@/lib/create-collection";
-import { naira, percent, timeAgo, type Contribution } from "@/lib/data";
+import { naira, percent, timeAgo, type Balance, type Contribution, type PayoutView } from "@/lib/data";
+import WithdrawCard from "@/components/WithdrawCard";
 import { reopenCollectionAction } from "@/app/actions/collections";
 
 const methodLabel = (m: string) => (m.includes("USSD") ? "USSD" : m.includes("CARD") ? "Card" : m.includes("WALLET") || m.includes("REQUEST_MONEY") ? "Paga wallet" : "Bank transfer");
 
-export default function CollectionView({ id, contributions, qr }: { id: string; contributions: Contribution[]; qr: string | null }) {
-  const { collections, closeCollection, updateCollection, refresh } = useApp();
+export default function CollectionView({ id, contributions, qr, balance, payouts }: {
+  id: string; contributions: Contribution[]; qr: string | null; balance: Balance; payouts: PayoutView[];
+}) {
+  const { collections, closeCollection, updateCollection, refresh, user } = useApp();
   const c = collections.find((x) => x.id === id);
   const [showAll, setShowAll] = useState(false);
   const [reopening, setReopening] = useState(false);
@@ -166,6 +169,8 @@ export default function CollectionView({ id, contributions, qr }: { id: string; 
               </>
             ) : <p className="mt-2 text-xs font-medium text-muted">No target set</p>}
           </Card>
+
+          <WithdrawCard collectionId={c.id} balance={balance} payouts={payouts} account={user.payout} />
 
           <Card className="p-5">
             <h2 className="text-sm font-bold">Public link</h2>
