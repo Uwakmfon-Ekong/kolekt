@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html { scroll-behavior: smooth; }
+body { @apply bg-bg text-ink antialiased; }
+
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.fw { animation: float 6s ease-in-out infinite; }
+.fa { animation: float 5s ease-in-out infinite; }
+.fb { animation: float 6.5s ease-in-out -2s infinite; }
+.fc { animation: float 4.2s ease-in-out -1s infinite; }
+@media (prefers-reduced-motion: reduce) { .fw, .fa, .fb, .fc { animation: none; } }
+
+@keyframes reveal { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.reveal { animation: reveal .28s ease-out; }
+@media (prefers-reduced-motion: reduce) { .reveal { animation: none; } }
+
+@keyframes page-enter { from { opacity: 0; } to { opacity: 1; } }
+.page-enter { animation: page-enter .35s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .page-enter { animation: none; } }
