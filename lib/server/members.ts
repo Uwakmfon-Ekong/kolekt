@@ -74,7 +74,9 @@ export async function memberStatus(collectionId: string, fixedAmount: number | n
     `select m.id, m.full_name, m.member_id, m.phone, p.total, p.last_paid
        from collection_members m
        left join lateral (
-         select sum(t.amount) as total, max(t.verified_at) as last_paid
+         select sum(t.amount - coalesce((select sum(p.amount) from payouts p
+                                          where p.transaction_reference = t.reference and p.kind = 'refund' and p.status <> 'failed'), 0)) as total,
+                max(t.verified_at) as last_paid
            from transactions t
           where t.collection_id = m.collection_id and t.status = 'successful'
             and (t.payer_key = m.member_key or ${nameKeySql("t.payer_name")} = m.name_key)

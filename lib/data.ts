@@ -59,6 +59,8 @@ export type PayoutView = {
   accountName: string;
   message: string | null;
   createdAt: string;
+  kind?: "withdrawal" | "refund";
+  transactionReference?: string | null;
 };
 
 export type Balance = { collected: number; paidOut: number; processing: number; available: number };
@@ -79,13 +81,16 @@ export type MemberStatus = { members: Member[]; notOnList: { name: string; paid:
 
 export type Stats = { totalCollected: number; thisWeek: number; contributions: number; paidOut: number; outstanding: number; contributors: number };
 
-export type PaymentLine = { reference: string; amount: number; paidAt: string; method: string; flagged: boolean };
+export type RefundLine = { reference: string; amount: number; status: "processing" | "successful" | "failed"; accountName: string; bankName: string; at: string };
+export type PaymentLine = { reference: string; amount: number; paidAt: string; method: string; flagged: boolean; refunded: number; refunds: RefundLine[] };
 /** One person in a collection: everyone who has paid, plus class-list members who haven't. */
 export type Contributor = {
   key: string;
   name: string;
   status: "paid" | "part" | "unpaid";
+  /** What they've paid, minus anything refunded to them. */
   paid: number;
+  refunded: number;
   expected: number | null;
   outstanding: number;
   details: Record<string, string>;
@@ -95,7 +100,23 @@ export type Contributor = {
   payments: PaymentLine[];
   lastPaid: string | null;
 };
-export type ContributorSummary = { people: number; paid: number; part: number; unpaid: number; collected: number; outstanding: number; contributors: number };
+export type ContributorSummary = { people: number; paid: number; part: number; unpaid: number; collected: number; outstanding: number; contributors: number; refunded: number };
+
+/** What a contributor sees after "Check my payment". Names are shortened; amounts are their own. */
+export type PaymentCheck =
+  | { found: false; message: string }
+  | {
+      found: true;
+      name: string;
+      onList: boolean;
+      paid: number;
+      refunded: number;
+      expected: number | null;
+      balance: number;
+      status: "paid" | "part" | "unpaid" | "contributed";
+      payments: { reference: string; amount: number; paidAt: string; refunded: number }[];
+      pending: { reference: string; amount: number } | null;
+    };
 
 export type Notice = { id: string; kind: "payment" | "flag" | "payout_ok" | "payout_failed" | "payout_processing"; title: string; text: string; at: string; href: string };
 

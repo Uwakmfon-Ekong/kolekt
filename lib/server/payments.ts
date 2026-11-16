@@ -60,7 +60,9 @@ export async function startContribution(input: {
     const fixed = Number(c.fixed_amount);
     // What this person has already paid into this collection (verified payments only).
     const [prior] = await q<{ paid: number | null }>(
-      "select sum(amount) as paid from transactions where collection_id = $1 and payer_key = $2 and status = 'successful'",
+      `select sum(t.amount) - coalesce((select sum(p.amount) from payouts p join transactions x on x.reference = p.transaction_reference
+                                          where x.collection_id = $1 and x.payer_key = $2 and p.kind = 'refund' and p.status <> 'failed'), 0) as paid
+         from transactions t where t.collection_id = $1 and t.payer_key = $2 and t.status = 'successful'`,
       [c.id, payerKey],
     );
     let left = Math.max(0, fixed - Number(prior?.paid ?? 0));

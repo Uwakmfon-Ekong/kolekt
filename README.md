@@ -21,7 +21,7 @@ Kolekt uses two Paga APIs:
 | API | Used for | Code |
 |---|---|---|
 | **Collect API** | Receiving contributions: one-time account numbers, payment notifications, ledger checks | `lib/server/paga.ts` |
-| **Business REST API** | Paying organisers: bank list, account-name check, deposit to bank, payout status | `lib/server/paga-business.ts` |
+| **Business REST API** | Paying organisers and refunding contributors: bank list, account-name check, deposit to bank, payout status | `lib/server/paga-business.ts` |
 
 ### Receiving money (Collect API)
 
@@ -66,6 +66,8 @@ Paga ──▶ POST /api/webhooks/paga-payout       x-paga-hash checked; status 
 | Same student tries to pay a fixed collection again after paying in full (even typing `csc 2021 014` vs `CSC/2021/014`) | Refused at checkout ("already paid the full amount") |
 | Two open payment requests from the same student both get paid | The extra payment is flagged "Paid twice" for the organiser |
 | Part payment larger than the student's remaining balance | Refused ("You have ₦3,500 left to pay") |
+| Refunding more than a payment, more than what's left in the collection, or with the wrong password | Refused |
+| "Check my payment" hammered with guesses | Limited to 20 checks per 10 minutes per visitor; names are shortened ("Blessing E.") |
 | Deleting a collection that has received money | Refused; it can only be closed, so no payment record is lost |
 | Browser lands on a success page | Never marks anything paid; only server-side verification does |
 | Receipt or payment page for an unknown reference | 404 |
@@ -86,6 +88,7 @@ Paga ──▶ POST /api/webhooks/paga-payout       x-paga-hash checked; status 
 - Collection overview: total collected, unique contributors, fully/part paid and outstanding balance. Dashboard totals include unique contributors and what's still owed.
 - **Notifications page** for verified payments, possible repeat payments and withdrawals (paid, processing or failed), with unread markers.
 - Delete a collection before anyone has paid (afterwards it can only be closed).
+- **Refunds through Paga:** refund a repeat payment or an overpayment straight to the contributor's bank account from their profile. Paga confirms the account holder's name first, the organiser's password is required, and balances, receipts and notifications update.
 - Collection page with every verified contribution, receipts, **CSV export**, WhatsApp sharing, a **QR code**, edit, close and reopen.
 - **Class list (paid / unpaid):** paste or upload a list of names, matric numbers and phone numbers. Kolekt ticks people off as Paga confirms each payment, matching by ID even when it's typed differently (`csc 2021 014` vs `CSC/2021/014`) and falling back to the name. Unpaid, Paid and "Not on list" tabs, with search.
 - **WhatsApp reminders:** one tap creates a group message listing who still owes, with the link and deadline. People with a phone number on the list get their own "Remind" button.
@@ -97,6 +100,7 @@ Paga ──▶ POST /api/webhooks/paga-payout       x-paga-hash checked; status 
 - No account and no app: name and details, then transfer.
 - A one-time account number, plus USSD and Paga wallet options when Paga provides them.
 - The page confirms the payment by itself, then shows a **verified receipt** (IDs and contact details partly hidden).
+- **Check my payment:** type the matric number (or phone/email) you paid with to see what's been received, your balance, refunds and your receipts, or reopen a payment that's still waiting.
 
 ## Getting started
 

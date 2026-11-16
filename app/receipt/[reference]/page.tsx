@@ -49,6 +49,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ refere
           ["Balance", Number(t.paid_to_date ?? 0) >= Number(t.fixed_amount) ? "Fully paid ✓" : naira(Number(t.fixed_amount) - Number(t.paid_to_date ?? t.amount))],
         ] as [string, string][])
       : []),
+    ...(Number(t.refunded ?? 0) > 0 ? ([["Refunded", `${naira(Number(t.refunded))} via Paga`]] as [string, string][]) : []),
     ["Kolekt reference", t.reference],
     ...(t.provider_reference ? [["Paga reference", t.provider_reference] as [string, string]] : []),
   ];

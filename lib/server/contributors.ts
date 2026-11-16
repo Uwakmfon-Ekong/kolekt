@@ -2,7 +2,7 @@ import "server-only";
 import { q } from "./db";
 import { nameKey } from "./members";
 import type { CollectionRow } from "./collections";
-import type { Contributor, ContributorSummary, PaymentLine } from "../data";
+import type { Contributor, ContributorSummary, PaymentLine, RefundLine } from "../data";
 
 type TxRow = {
   reference: string;
@@ -17,7 +17,8 @@ type TxRow = {
 };
 type MemberRow = { id: string; full_name: string; member_id: string | null; phone: string | null; member_key: string; name_key: string };
 
-type Group = { key: string; name: string; phone: string | null; details: Record<string, string>; payments: PaymentLine[]; paid: number; claimed: boolean };
+type Group = { key: string; name: string; phone: string | null; details: Record<string, string>; payments: PaymentLine[]; paid: number; refunded: number; claimed: boolean };
+type RefundRow = { reference: string; transaction_reference: string; amount: number; status: RefundLine["status"]; account_name: string; bank_name: string; created_at: string | Date };
 
 const parse = (v: TxRow["payer_details"]) => (typeof v === "string" ? JSON.parse(v) : v ?? {}) as Record<string, string>;
 
@@ -28,7 +29,7 @@ const parse = (v: TxRow["payer_details"]) => (typeof v === "string" ? JSON.parse
  * ID first, then by name; members with no payment appear as "unpaid".
  */
 export async function listContributors(c: Pick<CollectionRow, "id" | "collection_type" | "fixed_amount">): Promise<{ contributors: Contributor[]; summary: ContributorSummary }> {
-  const [txs, members] = await Promise.all([
+  const [txs, members, refundRows] = await Promise.all([
     q<TxRow>(
       `select reference, payer_key, payer_name, payer_phone, amount, verified_at, payment_method, payer_details, review_status
          from transactions where collection_id = $1 and status = 'successful'
@@ -36,17 +37,32 @@ export async function listContributors(c: Pick<CollectionRow, "id" | "collection
       [c.id],
     ),
     q<MemberRow>("select id, full_name, member_id, phone, member_key, name_key from collection_members where collection_id = $1 order by full_name", [c.id]),
+    q<RefundRow>(
+      "select reference, transaction_reference, amount, status, account_name, bank_name, created_at from payouts where collection_id = $1 and kind = 'refund' order by created_at desc",
+      [c.id],
+    ),
   ]);
+  const refundsByTx = new Map<string, RefundLine[]>();
+  for (const r of refundRows) {
+    const line: RefundLine = { reference: r.reference, amount: Number(r.amount), status: r.status, accountName: r.account_name, bankName: r.bank_name, at: new Date(r.created_at).toISOString() };
+    refundsByTx.set(r.transaction_reference, [...(refundsByTx.get(r.transaction_reference) ?? []), line]);
+  }
 
   const groups = new Map<string, Group>();
   for (const t of txs) {
-    const g = groups.get(t.payer_key) ?? { key: t.payer_key, name: t.payer_name, phone: null, details: {}, payments: [], paid: 0, claimed: false };
+    const g = groups.get(t.payer_key) ?? { key: t.payer_key, name: t.payer_name, phone: null, details: {}, payments: [], paid: 0, refunded: 0, claimed: false };
+    const refunds = refundsByTx.get(t.reference) ?? [];
+    // Refunds that went through, or are on their way, no longer count as paid.
+    const refunded = refunds.filter((r) => r.status !== "failed").reduce((s, r) => s + r.amount, 0);
     // The latest payment's details win (people sometimes fix a typo the second time).
     g.name = t.payer_name;
     g.phone = t.payer_phone ?? g.phone;
     g.details = parse(t.payer_details);
-    g.paid += Number(t.amount);
+    g.paid += Number(t.amount) - refunded;
+    g.refunded += refunded;
     g.payments.push({
+      refunded,
+      refunds,
       reference: t.reference,
       amount: Number(t.amount),
       paidAt: new Date(t.verified_at).toISOString(),
@@ -66,6 +82,7 @@ export async function listContributors(c: Pick<CollectionRow, "id" | "collection
       name: m?.full_name ?? g!.name,
       status,
       paid,
+      refunded: g?.refunded ?? 0,
       expected,
       outstanding: expected ? Math.max(0, expected - paid) : 0,
       details: g?.details ?? {},
@@ -104,6 +121,7 @@ export async function listContributors(c: Pick<CollectionRow, "id" | "collection
     collected: out.reduce((s, x) => s + x.paid, 0),
     outstanding: out.reduce((s, x) => s + x.outstanding, 0),
     contributors: out.filter((x) => x.paid > 0).length,
+    refunded: out.reduce((s, x) => s + x.refunded, 0),
   };
   return { contributors: out, summary };
 }

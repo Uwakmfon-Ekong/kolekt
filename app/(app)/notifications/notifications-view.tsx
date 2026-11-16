@@ -59,7 +59,7 @@ export default function NotificationsView({ notices }: { notices: Notice[] }) {
           <p className="mt-1 text-sm text-muted">{unread ? `${unread} new since your last visit` : "Payments verified by Paga and your withdrawals, as they happen."}</p>
         </div>
         <div className="flex gap-2" role="tablist" aria-label="Filter notifications">
-          {([["all", "All"], ["payments", "Payments"], ["payouts", "Withdrawals"]] as const).map(([id, label]) => (
+          {([["all", "All"], ["payments", "Payments"], ["payouts", "Withdrawals & refunds"]] as const).map(([id, label]) => (
             <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
               className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${tab === id ? "bg-primary text-white" : "bg-card text-ink hover:bg-accent/30"}`}>{label}</button>
           ))}
@@ -67,7 +67,7 @@ export default function NotificationsView({ notices }: { notices: Notice[] }) {
       </header>
 
       {shown.length === 0 ? (
-        <EmptyState icon="bell" title="Nothing here yet" text={tab === "payouts" ? "Withdrawals you make will show up here." : "Share a collection link. Every verified payment shows up here straight away."} />
+        <EmptyState icon="bell" title="Nothing here yet" text={tab === "payouts" ? "Withdrawals and refunds you make will show up here." : "Share a collection link. Every verified payment shows up here straight away."} />
       ) : (
         groups.map(([day, items]) => (
           <section key={day} aria-label={day}>

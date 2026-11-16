@@ -25,6 +25,7 @@ export type TxView = {
   fixed_amount: number | null;
   allow_part_payments: boolean;
   paid_to_date: number | null;
+  refunded: number | null;
 };
 
 /** Public view of one payment, by its unguessable reference. */
@@ -37,7 +38,8 @@ export async function getTransaction(reference: string) {
             c.collection_type, c.fixed_amount, c.allow_part_payments,
             (select sum(x.amount) from transactions x
               where x.collection_id = t.collection_id and x.payer_key = t.payer_key and x.status = 'successful'
-                and x.verified_at <= coalesce(t.verified_at, now())) as paid_to_date
+                and x.verified_at <= coalesce(t.verified_at, now())) as paid_to_date,
+            (select sum(p.amount) from payouts p where p.transaction_reference = t.reference and p.kind = 'refund' and p.status <> 'failed') as refunded
        from transactions t
        join collections c on c.id = t.collection_id
        join organisers o on o.id = c.organiser_id

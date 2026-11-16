@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, EmptyState } from "@/components/Card";
 import Icon, { type IconName } from "@/components/Icon";
-import { methodLabel, naira, timeAgo, type Collection, type Contributor, type ContributorSummary } from "@/lib/data";
+import { methodLabel, naira, timeAgo, type Collection, type Contributor, type ContributorSummary, type PaymentLine } from "@/lib/data";
+import RefundForm from "@/components/RefundForm";
+import { useRouter } from "next/navigation";
 
 type Filter = "all" | "paid" | "part" | "unpaid";
 const PAGE = 30;
@@ -40,7 +42,17 @@ function Info({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-export default function ContributorsView({ collection: c, contributors, summary }: { collection: Collection; contributors: Contributor[]; summary: ContributorSummary }) {
+export default function ContributorsView({ collection: c, contributors, summary, available }: { collection: Collection; contributors: Contributor[]; summary: ContributorSummary; available: number }) {
+  const router = useRouter();
+  const [refunding, setRefunding] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  /** Suggest refunding only what was overpaid; a flagged repeat payment can be refunded in full. */
+  const suggest = (p: Contributor, x: PaymentLine) => {
+    const left = x.amount - x.refunded;
+    if (x.flagged) return left;
+    if (p.expected && p.paid > p.expected) return Math.min(left, p.paid - p.expected);
+    return left;
+  };
   const fixed = c.contributionType === "fixed";
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -111,6 +123,13 @@ export default function ContributorsView({ collection: c, contributors, summary 
         </div>
       </header>
 
+      {notice && (
+        <p role="status" className="flex items-center gap-2 rounded-2xl bg-[#2E9E6B]/10 p-3.5 text-sm font-medium text-[#23885A]">
+          <Icon name="check" className="h-4 w-4 flex-none" width={3} /> {notice}
+          <button onClick={() => setNotice("")} aria-label="Dismiss" className="ml-auto grid h-6 w-6 place-items-center rounded-full hover:bg-white/60"><Icon name="x" className="h-3.5 w-3.5" /></button>
+        </p>
+      )}
+
       <section className={`grid grid-cols-2 gap-3 ${fixed ? "lg:grid-cols-5" : "lg:grid-cols-4"}`} aria-label="Summary">
         <Summary icon="users" label="People" value={summary.people} sub={`${summary.contributors} have paid something`} />
         <Summary icon="check" label={fixed ? "Fully paid" : "Contributed"} value={summary.paid} tone="good" />
@@ -158,7 +177,8 @@ export default function ContributorsView({ collection: c, contributors, summary 
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate text-sm font-semibold">{p.name}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${BADGE[p.status].cls}`}>{fixed || p.status === "unpaid" ? BADGE[p.status].label : "Contributed"}</span>
-                        {p.payments.some((x) => x.flagged) && <span className="rounded-full bg-[#E8A33D]/15 px-2 py-0.5 text-[10px] font-bold text-[#A86B12]">Paid twice</span>}
+                        {p.refunded > 0 && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">Refunded {naira(p.refunded)}</span>}
+                        {p.payments.some((x) => x.flagged && x.refunded < x.amount) && <span className="rounded-full bg-[#E8A33D]/15 px-2 py-0.5 text-[10px] font-bold text-[#A86B12]">Paid twice</span>}
                         {!p.onList && hasList && <span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-bold text-muted">Not on list</span>}
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-muted">{contact || (p.lastPaid ? `Paid ${timeAgo(p.lastPaid)}` : "No payment yet")}</span>
@@ -190,6 +210,7 @@ export default function ContributorsView({ collection: c, contributors, summary 
                           {fixed && <Info label="Expected" value={naira(p.expected ?? 0)} />}
                           {fixed && <Info label="Balance" value={naira(p.outstanding)} />}
                           <Info label="Payments" value={String(p.payments.length)} />
+                          {p.refunded > 0 && <Info label="Refunded" value={naira(p.refunded)} />}
                         </dl>
                       </div>
 
@@ -198,13 +219,34 @@ export default function ContributorsView({ collection: c, contributors, summary 
                         {p.payments.length ? (
                           <ul className="mt-2 divide-y divide-card rounded-2xl border border-card">
                             {p.payments.map((x) => (
-                              <li key={x.reference} className="flex items-center gap-3 px-3.5 py-3">
-                                <span className="grid h-8 w-8 flex-none place-items-center rounded-full bg-[#2E9E6B]/12 text-[#23885A]"><Icon name="check" className="h-4 w-4" width={3} /></span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block text-sm font-semibold">{naira(x.amount)} <span className="font-medium text-muted">· {methodLabel(x.method)}</span></span>
-                                  <span className="block truncate text-[11px] text-muted">{when(x.paidAt)} · <span className="font-mono">{x.reference}</span></span>
-                                </span>
-                                <a href={`/receipt/${x.reference}`} target="_blank" rel="noreferrer" className="flex-none text-xs font-bold text-primary hover:underline">Receipt</a>
+                              <li key={x.reference} className="px-3.5 py-3">
+                                <div className="flex items-center gap-3">
+                                  <span className="grid h-8 w-8 flex-none place-items-center rounded-full bg-[#2E9E6B]/12 text-[#23885A]"><Icon name="check" className="h-4 w-4" width={3} /></span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="flex flex-wrap items-center gap-x-2 text-sm font-semibold">{naira(x.amount)} <span className="font-medium text-muted">· {methodLabel(x.method)}</span>
+                                      {x.flagged && x.refunded < x.amount && <span className="rounded-full bg-[#E8A33D]/15 px-2 py-0.5 text-[10px] font-bold text-[#A86B12]">Paid twice</span>}
+                                    </span>
+                                    <span className="block truncate text-[11px] text-muted">{when(x.paidAt)} · <span className="font-mono">{x.reference}</span></span>
+                                  </span>
+                                  <span className="flex flex-none flex-col items-end gap-1">
+                                    <a href={`/receipt/${x.reference}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-primary hover:underline">Receipt</a>
+                                    {x.refunded < x.amount && refunding !== x.reference && (
+                                      <button onClick={() => { setRefunding(x.reference); setNotice(""); }} className="text-xs font-bold text-[#C2344D] hover:underline">Refund</button>
+                                    )}
+                                  </span>
+                                </div>
+                                {x.refunds.map((r) => (
+                                  <p key={r.reference} className={`ml-11 mt-1.5 text-[11px] font-semibold ${r.status === "failed" ? "text-[#C2344D]" : r.status === "processing" ? "text-[#A86B12]" : "text-primary"}`}>
+                                    ↩ {naira(r.amount)} refund {r.status === "successful" ? "sent" : r.status === "processing" ? "processing" : "failed"} to {r.accountName} · {r.bankName} · {timeAgo(r.at)}
+                                  </p>
+                                ))}
+                                {refunding === x.reference && (
+                                  <div className="mt-3">
+                                    <RefundForm collectionId={c.id} reference={x.reference} payerName={p.name} max={x.amount - x.refunded} suggested={suggest(p, x)} available={available}
+                                      onCancel={() => setRefunding(null)}
+                                      onDone={(m) => { setRefunding(null); setNotice(m); router.refresh(); }} />
+                                  </div>
+                                )}
                               </li>
                             ))}
                           </ul>

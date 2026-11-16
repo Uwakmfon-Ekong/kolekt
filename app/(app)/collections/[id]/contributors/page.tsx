@@ -2,6 +2,7 @@ import { requireOrganiser } from "@/lib/server/auth";
 import { appUrl } from "@/lib/server/app-url";
 import { getOwnedCollection, toCollection } from "@/lib/server/collections";
 import { listContributors } from "@/lib/server/contributors";
+import { balanceFor } from "@/lib/server/payouts";
 import { EmptyState } from "@/components/Card";
 import { LinkButton } from "@/components/Button";
 import ContributorsView from "./contributors-view";
@@ -16,6 +17,6 @@ export default async function ContributorsPage({ params }: { params: Promise<{ i
     return <EmptyState icon="inbox" title="Collection not found" text="It may have been removed, or the link is incorrect."
       action={<LinkButton href="/collections" size="md">Back to Collections</LinkButton>} />;
   }
-  const { contributors, summary } = await listContributors(row);
-  return <ContributorsView collection={toCollection(row, await appUrl())} contributors={contributors} summary={summary} />;
+  const [{ contributors, summary }, balance] = await Promise.all([listContributors(row), balanceFor(row.id)]);
+  return <ContributorsView collection={toCollection(row, await appUrl())} contributors={contributors} summary={summary} available={balance.available} />;
 }

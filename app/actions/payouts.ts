@@ -5,7 +5,7 @@ import { one, q } from "@/lib/server/db";
 import { requireOrganiser, verifyPassword } from "@/lib/server/auth";
 import { appUrl } from "@/lib/server/app-url";
 import { getBanks, validateAccount, type Bank } from "@/lib/server/paga-business";
-import { PayoutError, refreshPayout, requestPayout, type Payout } from "@/lib/server/payouts";
+import { PayoutError, refreshPayout, requestPayout, requestRefund, type Payout } from "@/lib/server/payouts";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -78,4 +78,51 @@ export async function refreshPayoutAction(reference: string): Promise<Result<Pay
   if (!p) return { ok: false, error: "Payout not found." };
   revalidatePath("/", "layout");
   return { ok: true, data: p };
+}
+
+/** Look up a contributor's bank account name with Paga before refunding to it. */
+export async function verifyRecipientAction(bankUUID: string, accountNumber: string, name: string): Promise<Result<{ accountName: string; bankName: string }>> {
+  await requireOrganiser();
+  try {
+    const bank = await bankByUuid(String(bankUUID));
+    if (!bank) return { ok: false, error: "Choose the bank." };
+    const r = await validateAccount({ bankUUID: bank.uuid, accountNumber: String(accountNumber).trim(), amount: 1000, fallbackName: String(name).slice(0, 60) || "Contributor" });
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, data: { accountName: r.accountName, bankName: bank.name } };
+  } catch (e) {
+    console.error("[refund] validate failed", e);
+    return { ok: false, error: "We couldn’t reach Paga to check that account. Please try again." };
+  }
+}
+
+/** Refund a payment to the contributor through Paga. The organiser's password is required. */
+export async function refundAction(input: {
+  collectionId: string;
+  transactionReference: string;
+  amount: number;
+  bankUUID: string;
+  accountNumber: string;
+  password: string;
+}): Promise<Result<Payout>> {
+  const me = await requireOrganiser();
+  const row = await one<{ password_hash: string }>("select password_hash from organisers where id = $1", [me.id]);
+  if (!row || !(await verifyPassword(String(input.password ?? ""), row.password_hash))) return { ok: false, error: "That password isn’t right." };
+  try {
+    const p = await requestRefund({
+      organiserId: me.id,
+      collectionId: String(input.collectionId),
+      transactionReference: String(input.transactionReference),
+      amount: Number(input.amount),
+      bankUUID: String(input.bankUUID),
+      accountNumber: String(input.accountNumber),
+      appUrl: await appUrl(),
+    });
+    revalidatePath("/", "layout");
+    if (p.status === "failed") return { ok: false, error: `Paga couldn’t send the refund: ${p.message ?? "unknown error"}. No money left your balance.` };
+    return { ok: true, data: p };
+  } catch (e) {
+    if (e instanceof PayoutError) return { ok: false, error: e.message };
+    console.error("[refund] failed", e);
+    return { ok: false, error: "Something went wrong. Please try again." };
+  }
 }

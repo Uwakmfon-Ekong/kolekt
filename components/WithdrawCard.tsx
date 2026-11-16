@@ -90,13 +90,13 @@ export default function WithdrawCard({ collectionId, balance, payouts, account }
 
       {payouts.length > 0 && (
         <div className="mt-5 border-t border-card pt-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-muted">Payouts</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-muted">Payouts & refunds</p>
           <ul className="mt-2 divide-y divide-card">
             {payouts.slice(0, 6).map((p) => (
               <li key={p.reference} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="text-sm font-bold">{naira(p.amount)}</p>
-                  <p className="truncate text-[11px] text-muted">{timeAgo(p.createdAt)} · {p.bankName} {maskAccount(p.accountNumber)}</p>
+                  <p className="text-sm font-bold">{naira(p.amount)}{p.kind === "refund" && <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">Refund</span>}</p>
+                  <p className="truncate text-[11px] text-muted">{timeAgo(p.createdAt)} · {p.kind === "refund" ? `${p.accountName} · ${p.bankName}` : `${p.bankName} ${maskAccount(p.accountNumber)}`}</p>
                 </div>
                 <div className="flex flex-none items-center gap-2">
                   {p.status === "processing" && (

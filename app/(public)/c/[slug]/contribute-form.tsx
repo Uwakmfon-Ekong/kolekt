@@ -7,6 +7,15 @@ import Icon from "@/components/Icon";
 import WalletIllustration from "@/components/WalletIllustration";
 import { naira, timeAgo, type Collection } from "@/lib/data";
 import { startContributionAction } from "@/app/actions/checkout";
+import CheckPayment from "@/components/CheckPayment";
+
+/** The field people are identified by, in the same order the server uses. */
+function idField(fields: string[]) {
+  return fields.find((f) => /matric|reg(istration)?\b|reg\.|member|staff|student id|id number/i.test(f))
+    ?? fields.find((f) => /phone|mobile|whatsapp/i.test(f))
+    ?? fields.find((f) => /e-?mail/i.test(f))
+    ?? "Full Name";
+}
 
 function inputType(field: string) {
   const f = field.toLowerCase();
@@ -42,7 +51,7 @@ export default function ContributeForm({ collection, progress, supporters }: { c
     return () => clearInterval(id);
   }, [collection, router]);
 
-  if (!collection || collection.status !== "Active") return <main className="grid min-h-screen place-items-center bg-bg px-5"><div className="max-w-sm rounded-3xl border border-card bg-white p-8 text-center shadow-soft"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-card text-primary"><Icon name="inbox" className="h-7 w-7" /></span><h1 className="mt-4 text-xl font-extrabold">{collection ? "This collection is closed" : "Collection not found"}</h1><p className="mt-2 text-sm text-muted">{collection ? `${collection.name} is no longer accepting contributions. ${naira(collection.collected)} was collected.` : "The link may be incorrect. Check it with the person who shared it."}</p><a href="/" className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white">Go to Kolekt</a></div></main>;
+  if (!collection || collection.status !== "Active") return <main className="grid min-h-screen place-items-center bg-bg px-5 py-10"><div className="w-full max-w-sm"><div className="rounded-3xl border border-card bg-white p-8 text-center shadow-soft"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-card text-primary"><Icon name="inbox" className="h-7 w-7" /></span><h1 className="mt-4 text-xl font-extrabold">{collection ? "This collection is closed" : "Collection not found"}</h1><p className="mt-2 text-sm text-muted">{collection ? `${collection.name} is no longer accepting contributions. ${naira(collection.collected)} was collected.` : "The link may be incorrect. Check it with the person who shared it."}</p><a href="/" className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white">Go to Kolekt</a></div>{collection?.slug && <div className="mt-4 text-left"><CheckPayment slug={collection.slug} idLabel={idField(collection.contributorFields ?? ["Full Name"])} /></div>}</div></main>;
 
   const fields = collection.contributorFields?.length ? collection.contributorFields : ["Full Name"];
   const fixed = collection.contributionType === "fixed";
@@ -119,6 +128,7 @@ export default function ContributeForm({ collection, progress, supporters }: { c
               </div>
             )}
             <dl className="grid grid-cols-2 gap-3">{[{ label: "Contribution", value: fixed ? `${naira(full)}${part ? " · part payments OK" : ""}` : "Flexible amount" }, { label: "Deadline", value: collection.deadline ? new Date(`${collection.deadline}T00:00:00`).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "No deadline" }].map((x) => <div key={x.label} className="rounded-2xl border border-card p-3.5"><dt className="text-xs font-semibold text-muted">{x.label}</dt><dd className="mt-1 text-sm font-bold">{x.value}</dd></div>)}</dl>
+            <CheckPayment slug={collection.slug!} idLabel={idField(fields)} />
             <form onSubmit={submit} className="space-y-4">
               <div><h2 className="text-base font-extrabold">Your information</h2><p className="mt-1 text-xs text-muted">Please provide the details requested by the organiser.</p></div>
               {fields.map((field) => {

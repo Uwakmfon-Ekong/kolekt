@@ -14,8 +14,8 @@ export async function listNotices(organiserId: string, limit = 60): Promise<Noti
         order by t.verified_at desc limit $2`,
       [organiserId, limit],
     ),
-    q<{ reference: string; amount: number; status: string; bank_name: string; account_number: string; title: string; collection_id: string; created_at: string | Date; updated_at: string | Date; message: string | null }>(
-      `select p.reference, p.amount, p.status, p.bank_name, p.account_number, c.title, c.id as collection_id, p.created_at, p.updated_at, p.message
+    q<{ reference: string; amount: number; status: string; bank_name: string; account_number: string; account_name: string; kind: string; title: string; collection_id: string; created_at: string | Date; updated_at: string | Date; message: string | null }>(
+      `select p.reference, p.amount, p.status, p.bank_name, p.account_number, p.account_name, p.kind, c.title, c.id as collection_id, p.created_at, p.updated_at, p.message
          from payouts p join collections c on c.id = p.collection_id
         where p.organiser_id = $1
         order by p.updated_at desc limit $2`,
@@ -37,14 +37,17 @@ export async function listNotices(organiserId: string, limit = 60): Promise<Noti
     };
   });
   for (const p of outs) {
-    const to = `${p.bank_name} ••${p.account_number.slice(-4)}`;
     const amount = naira(Number(p.amount));
+    const refund = p.kind === "refund";
+    const to = refund ? `${p.account_name} (${p.bank_name})` : `${p.bank_name} ••${p.account_number.slice(-4)}`;
+    const href = refund ? `/collections/${p.collection_id}/contributors` : `/collections/${p.collection_id}`;
+    const what = refund ? "Refund" : "Withdrawal";
     notices.push(
       p.status === "successful"
-        ? { id: `out:${p.reference}`, kind: "payout_ok", title: "Withdrawal paid", text: `${amount} from ${p.title} was sent to ${to}`, at: new Date(p.updated_at).toISOString(), href: `/collections/${p.collection_id}` }
+        ? { id: `out:${p.reference}`, kind: "payout_ok", title: `${what} paid`, text: refund ? `${amount} from ${p.title} was refunded to ${to}` : `${amount} from ${p.title} was sent to ${to}`, at: new Date(p.updated_at).toISOString(), href }
         : p.status === "failed"
-          ? { id: `out:${p.reference}`, kind: "payout_failed", title: "Withdrawal failed", text: `${amount} from ${p.title} couldn’t be sent to ${to}${p.message ? `: ${p.message}` : ""}. The money is back in your balance.`, at: new Date(p.updated_at).toISOString(), href: `/collections/${p.collection_id}` }
-          : { id: `out:${p.reference}`, kind: "payout_processing", title: "Withdrawal processing", text: `${amount} from ${p.title} is on its way to ${to}`, at: new Date(p.created_at).toISOString(), href: `/collections/${p.collection_id}` },
+          ? { id: `out:${p.reference}`, kind: "payout_failed", title: `${what} failed`, text: `${amount} from ${p.title} couldn’t be sent to ${to}${p.message ? `: ${p.message}` : ""}. The money is back in your balance.`, at: new Date(p.updated_at).toISOString(), href }
+          : { id: `out:${p.reference}`, kind: "payout_processing", title: `${what} processing`, text: `${amount} from ${p.title} is on its way to ${to}`, at: new Date(p.created_at).toISOString(), href },
     );
   }
   return notices.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);

@@ -101,6 +101,10 @@ create table if not exists payouts (
   updated_at timestamptz not null default now()
 );
 create index if not exists payouts_collection_idx on payouts(collection_id);
+-- Refunds to contributors go through the same Paga deposit-to-bank flow as withdrawals.
+alter table payouts add column if not exists kind text not null default 'withdrawal';
+alter table payouts add column if not exists transaction_reference text;
+create index if not exists payouts_tx_ref_idx on payouts(transaction_reference);
 
 -- The organiser's class / member list, for paid-vs-unpaid tracking.
 create table if not exists collection_members (
