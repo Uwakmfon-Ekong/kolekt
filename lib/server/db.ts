@@ -28,6 +28,14 @@ async function createPostgres(url: string): Promise<Db> {
   const sql = postgres(url, {
     max: 5,
     prepare: false, // required for Supabase's transaction pooler (port 6543)
+    // Supabase's pooler (Supavisor < 2.10) hangs on pipelined queries in transaction mode:
+    // the answers never arrive and the page loads forever. One query per connection at a time.
+    max_pipeline: 1,
+    // Backstops so a pooler that stops answering fails fast instead of hanging the whole app.
+    connect_timeout: 15,
+    query_timeout: 30,
+    // "relation already exists, skipping" notices from the schema step are noise.
+    onnotice: () => {},
     ssl: url.includes("localhost") || url.includes("127.0.0.1") ? false : "require",
     types: { numeric: { to: 1700, from: [1700], serialize: String, parse: Number } },
   });
@@ -40,8 +48,34 @@ async function createPostgres(url: string): Promise<Db> {
     ...wrap(sql),
     tx: (fn) => sql.begin((t) => fn(wrap(t as unknown as typeof sql))) as never,
   };
-  await sql.unsafe(SCHEMA_SQL);
+  await ensureSchema(sql);
   return db;
+}
+
+/**
+ * The schema script's ALTER TABLEs take an exclusive lock on each table, even when the column
+ * already exists. Run on every boot against a shared database (local dev + the deployed app),
+ * that queues behind other connections' reads and hits Supabase's statement timeout, and
+ * everything queued behind the ALTER stalls too. So: skip it when the schema is current, and
+ * otherwise give up on a lock quickly instead of blocking the whole database.
+ */
+async function ensureSchema(sql: import("postgres").Sql) {
+  // The newest objects in SCHEMA_SQL. Update this check when adding to the schema.
+  const [r] = await sql.unsafe<{ ok: boolean }[]>(
+    `select to_regclass('mock_paga_payments') is not null
+        and exists (select 1 from information_schema.columns
+                     where table_schema = current_schema() and table_name = 'collections' and column_name = 'optional_fields') as ok`,
+  );
+  if (r?.ok) return;
+  try {
+    await sql.begin(async (t) => {
+      await t.unsafe("set local lock_timeout = '5s'");
+      await t.unsafe(SCHEMA_SQL);
+    });
+  } catch (e) {
+    console.error("[db] schema update failed; run supabase/schema.sql in the Supabase SQL editor", e);
+    throw e;
+  }
 }
 
 async function createPglite(): Promise<Db> {

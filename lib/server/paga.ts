@@ -46,6 +46,29 @@ function safeEqualHex(a: string, b: string) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+/**
+ * Debug: print exactly what's about to go to Paga, and flag anything empty, before sending.
+ * Keys are never printed (only their lengths). Turn off with PAGA_DEBUG=0.
+ */
+function logOutgoing(endpoint: string, body: Record<string, unknown>, hashParts: (string | number | null | undefined)[], hash: string) {
+  if (process.env.PAGA_DEBUG === "0") return;
+  const required = ["referenceNumber", "amount", "currency", "payer.name", "payee.name", "payerCollectionFeeShare", "payeeCollectionFeeShare", "callBackUrl", "paymentMethods"];
+  const get = (path: string) => path.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], body);
+  const isEmpty = (v: unknown) => v === undefined || v === null || v === "" || (typeof v === "number" && !Number.isFinite(v)) || (Array.isArray(v) && v.length === 0);
+  const missing = required.filter((f) => isEmpty(get(f)));
+  const payer = (body.payer ?? {}) as Record<string, unknown>;
+  if (isEmpty(payer.phoneNumber) && isEmpty(payer.email)) missing.push("payer.phoneNumber or payer.email");
+  const len = (k: string) => (process.env[k] ? `${process.env[k]!.length} chars` : "EMPTY");
+  console.log(
+    `[paga debug] → POST ${BASE[pagaMode() === "live" ? "live" : "sandbox"]}${endpoint}\n` +
+      `  keys: PAGA_PUBLIC_KEY=${len("PAGA_PUBLIC_KEY")}, PAGA_SECRET_KEY=${len("PAGA_SECRET_KEY")}, PAGA_HASH_KEY=${len("PAGA_HASH_KEY")}\n` +
+      `  body: ${JSON.stringify(body, null, 2).replace(/\n/g, "\n  ")}\n` +
+      `  hash input (before hash key): ${JSON.stringify(hashParts.filter((p) => p !== null && p !== undefined && p !== "").join(""))}\n` +
+      `  hash: ${hash.slice(0, 16)}… (${hash.length} chars)\n` +
+      `  ${missing.length ? `⚠ EMPTY required fields: ${missing.join(", ")}` : "✓ all required fields present"}`,
+  );
+}
+
 /** Paga timestamps: "2026-04-23T11:45:00" (UTC, no zone suffix). */
 const pagaDate = (d: Date) => d.toISOString().slice(0, 19);
 
@@ -146,7 +169,9 @@ export async function requestPayment(input: {
   };
   // hash: referenceNumber + amount + currency + payer.phoneNumber + payer.email + hashKey
   // (an empty string for any of them that isn't sent)
-  const hash = hashOf([input.reference, input.amount, "NGN", input.payerPhone ?? null, input.payerEmail ?? null]);
+  const hashParts = [input.reference, input.amount, "NGN", input.payerPhone ?? null, input.payerEmail ?? null];
+  const hash = hashOf(hashParts);
+  logOutgoing("paymentRequest", body, hashParts, hash);
   const res = await call<PaymentRequestResponse>("paymentRequest", body, hash);
   if (res.statusCode !== "0") {
     console.error("[paga] paymentRequest reply", JSON.stringify(res).slice(0, 500));
