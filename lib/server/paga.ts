@@ -365,6 +365,64 @@ export function keyHint(v: string | undefined) {
   return `${v.length} characters${issues.length ? " (" + issues.join("; ") + ")" : ""}`;
 }
 
+/**
+ * Setup check: send the example from Paga's "Dynamic virtual account → Create a payment request"
+ * reference page, as-is apart from a fresh reference, a future expiry and the given phone number.
+ * Sandbox only. Reports the exact request (minus credentials) and Paga's reply.
+ */
+export async function collectTestPaymentRequest(input: { phoneNumber: string; callBackUrl: string }) {
+  const mode = pagaMode();
+  if (mode !== "sandbox") return { mode, ok: false, detail: mode === "mock" ? "No Collect keys set, so the app is in demo mode." : "This test only runs against the sandbox." };
+  const referenceNumber = `KTEST-${Date.now()}`;
+  const body = {
+    referenceNumber,
+    amount: 50,
+    currency: "NGN",
+    payer: { name: "Bello Ramon", phoneNumber: input.phoneNumber },
+    payee: { name: "Your business name" },
+    expiryDateTimeUTC: pagaDate(new Date(Date.now() + 24 * 3600e3)),
+    isSuppressMessages: true,
+    payerCollectionFeeShare: 1,
+    payeeCollectionFeeShare: 0,
+    isAllowPartialPayments: false,
+    isAllowOverPayments: false,
+    callBackUrl: input.callBackUrl,
+    paymentMethods: ["BANK_TRANSFER"],
+  };
+  // Hash: referenceNumber + amount + currency + payer.phoneNumber + payer.email (empty) + hashKey
+  const hashInput = `${referenceNumber}${body.amount}${body.currency}${input.phoneNumber}`;
+  const hash = sha512(hashInput + hashKey());
+  try {
+    const auth = Buffer.from(`${process.env.PAGA_PUBLIC_KEY}:${process.env.PAGA_SECRET_KEY}`).toString("base64");
+    const started = Date.now();
+    const res = await fetch(BASE.sandbox + "paymentRequest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Basic ${auth}`, hash },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(30000),
+    });
+    const text = await res.text();
+    let reply: unknown = text;
+    try { reply = JSON.parse(text); } catch { /* not JSON */ }
+    const code = (reply as { statusCode?: string })?.statusCode;
+    return {
+      mode,
+      ok: res.ok && String(code) === "0",
+      sent: {
+        url: BASE.sandbox + "paymentRequest",
+        headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: "Basic <public key:secret key, hidden>", hash },
+        hashInputBeforeHashKey: hashInput,
+        body,
+      },
+      pagaReplied: { httpStatus: res.status, ms: Date.now() - started, body: reply },
+      keys: { PAGA_PUBLIC_KEY: keyHint(process.env.PAGA_PUBLIC_KEY), PAGA_SECRET_KEY: keyHint(process.env.PAGA_SECRET_KEY), PAGA_HASH_KEY: keyHint(process.env.PAGA_HASH_KEY) },
+    };
+  } catch (e) {
+    return { mode, ok: false, detail: String((e as Error).message).slice(0, 300) };
+  }
+}
+
 /** Setup check: one harmless Collect call (/banks), reporting exactly what Paga replied. */
 export async function collectPing(): Promise<{ mode: PagaMode; ok: boolean; detail: string; httpStatus?: number; pagaReplied?: string; keys?: Record<string, string> }> {
   const mode = pagaMode();
