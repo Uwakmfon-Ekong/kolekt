@@ -75,6 +75,7 @@ export async function POST(req: Request) {
       const result = await settleTransaction(reference, {
         providerReference: payload.fundingPaymentReference ?? payload.fundingDetails?.paymentReferenceNumber,
         paymentMethod: "BANK_TRANSFER",
+        signedCallback: payload.event === "PAYMENT_COMPLETE",
       });
       if (result.outcome === "settled" || result.outcome === "already_final") {
         await setStatus("verified");

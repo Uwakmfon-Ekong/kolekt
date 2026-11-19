@@ -141,14 +141,15 @@ export async function requestPayment(input: {
     isAllowPartialPayments: false,
     isAllowOverPayments: false,
     callBackUrl: input.callbackUrl,
-    redirectUrl: input.redirectUrl,
-    paymentMethods: ["BANK_TRANSFER", "FUNDING_USSD", "REQUEST_MONEY"],
+    // Paga's dynamic virtual account flow: bank transfer only (redirectUrl is for Paga Wallet payments).
+    paymentMethods: ["BANK_TRANSFER"],
   };
-  // hash: referenceNumber + amount + currency + payer.phoneNumber + payer.email
-  //       + payee.accountNumber + payee.phoneNumber + payee.bankId + payee.bankAccountNumber + hashKey
-  const hash = hashOf([input.reference, input.amount, "NGN", input.payerPhone ?? null, input.payerEmail ?? null, null, null, null, null]);
+  // hash: referenceNumber + amount + currency + payer.phoneNumber + payer.email + hashKey
+  // (an empty string for any of them that isn't sent)
+  const hash = hashOf([input.reference, input.amount, "NGN", input.payerPhone ?? null, input.payerEmail ?? null]);
   const res = await call<PaymentRequestResponse>("paymentRequest", body, hash);
   if (res.statusCode !== "0") {
+    console.error("[paga] paymentRequest reply", JSON.stringify(res).slice(0, 500));
     throw new Error(`Paga paymentRequest failed: ${res.statusCode} ${res.statusMessage}`);
   }
 
@@ -179,12 +180,29 @@ type HistoryResponse = {
   items?: { referenceNumber: string; operation: string; action: string; amount: number; status: string }[];
 };
 
-export type Verification = { paid: boolean; amountPaid: number; detail: string };
+export type Verification = { paid: boolean; amountPaid: number; detail: string; unavailable?: boolean };
+
+const PAID_STATES = new Set(["SUCCESSFUL", "SUCCESS", "PAID", "PAID_NOT_SETTLED", "COMPLETED", "COMPLETE", "PAYMENT_COMPLETE", "SETTLED"]);
+
+/** Paga's "check payment status" call. Its reply shape differs between doc versions, so read it loosely. */
+async function statusCheck(reference: string): Promise<Verification | null> {
+  try {
+    const r = await call<Record<string, unknown>>("status", { referenceNumber: reference }, hashOf([reference]));
+    if (String(r.statusCode) !== "0") return null; // not available, or an error: try the next way
+    const data = (r.data ?? r) as Record<string, unknown>;
+    const state = String(data.status ?? data.paymentStatus ?? data.state ?? r.status ?? "").toUpperCase();
+    const amount = Number(data.amountPaid ?? data.cumulativePaymentAmount ?? data.paymentAmount ?? data.amount ?? 0);
+    return { paid: PAID_STATES.has(state), amountPaid: amount, detail: `status: ${state || "unknown"}` };
+  } catch (e) {
+    console.error("[paga] status check failed", reference, (e as Error).message);
+    return null;
+  }
+}
 
 /**
  * Ask Paga directly whether money arrived for this reference. We never trust the
- * browser, and we don't trust a webhook on its own either: a valid hash proves
- * the message came from Paga, this proves the ledger agrees.
+ * browser. With a working status call we don't rely on a webhook alone either:
+ * a valid hash proves the message came from Paga, this proves Paga's records agree.
  */
 export async function verifyPayment(reference: string, createdAt: Date): Promise<Verification> {
   const mode = pagaMode();
@@ -198,21 +216,28 @@ export async function verifyPayment(reference: string, createdAt: Date): Promise
     return { paid: total > 0, amountPaid: total, detail: `mock ledger: ${rows[0]?.n ?? 0} payment(s)` };
   }
 
-  const start = new Date(createdAt.getTime() - 60 * 60 * 1000);
-  const end = new Date(Date.now() + 60 * 60 * 1000);
-  const res = await call<HistoryResponse>(
-    "history",
-    { referenceNumber: reference, startDateTimeUTC: pagaDate(start), endDateTimeUTC: pagaDate(end) },
-    hashOf([reference]),
-  );
-  if (res.statusCode !== "0") {
-    return { paid: false, amountPaid: 0, detail: `history ${res.statusCode}: ${res.statusMessage}` };
+  const st = await statusCheck(reference);
+  if (st) return st;
+
+  try {
+    const start = new Date(createdAt.getTime() - 60 * 60 * 1000);
+    const end = new Date(Date.now() + 60 * 60 * 1000);
+    const res = await call<HistoryResponse>(
+      "history",
+      { referenceNumber: reference, startDateTimeUTC: pagaDate(start), endDateTimeUTC: pagaDate(end) },
+      hashOf([reference]),
+    );
+    if (res.statusCode !== "0") {
+      return { paid: false, amountPaid: 0, detail: `history ${res.statusCode}: ${res.statusMessage}`, unavailable: true };
+    }
+    const payments = (res.items ?? []).filter(
+      (i) => i.action === "PAYMENT" && (i.status === "SUCCESSFUL" || i.status === "PAID_NOT_SETTLED"),
+    );
+    const total = payments.reduce((s, i) => s + Number(i.amount || 0), 0);
+    return { paid: payments.length > 0, amountPaid: total, detail: `history: ${payments.length} successful payment(s)` };
+  } catch (e) {
+    return { paid: false, amountPaid: 0, detail: `history failed: ${(e as Error).message}`, unavailable: true };
   }
-  const payments = (res.items ?? []).filter(
-    (i) => i.action === "PAYMENT" && (i.status === "SUCCESSFUL" || i.status === "PAID_NOT_SETTLED"),
-  );
-  const total = payments.reduce((s, i) => s + Number(i.amount || 0), 0);
-  return { paid: payments.length > 0, amountPaid: total, detail: `history: ${payments.length} successful payment(s)` };
 }
 
 /* ------------------------------------------------------------------ */

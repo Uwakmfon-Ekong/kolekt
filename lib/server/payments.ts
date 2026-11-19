@@ -158,7 +158,7 @@ type TxLock = { id: string; status: string; collection_id: string; payer_key: st
  */
 export async function settleTransaction(
   reference: string,
-  hints: { providerReference?: string; paymentMethod?: string } = {},
+  hints: { providerReference?: string; paymentMethod?: string; signedCallback?: boolean } = {},
 ): Promise<SettleResult> {
   const [pre] = await q<{ status: string; created_at: string }>("select status, created_at from transactions where reference = $1", [reference]);
   if (!pre) return { outcome: "not_found" };
@@ -166,7 +166,11 @@ export async function settleTransaction(
 
   // The network call happens outside the database transaction, so no row lock is held during I/O.
   const v = await verifyPayment(reference, new Date(pre.created_at));
-  if (!v.paid) return { outcome: "not_paid", detail: v.detail };
+  // If Paga's status lookups can't be reached at all, a PAYMENT_COMPLETE notification whose
+  // hash checked out (it can only come from Paga) is enough on its own. Polling never gets this pass.
+  const paid = v.paid || (v.unavailable === true && hints.signedCallback === true);
+  if (!paid) return { outcome: "not_paid", detail: v.detail };
+  if (!v.paid) console.warn("[paga] settled on the signed notification alone:", reference, v.detail);
 
   const db = await getDb();
   return db.tx(async (tx) => {
