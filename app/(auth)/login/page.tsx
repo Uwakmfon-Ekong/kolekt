@@ -76,7 +76,7 @@ function LoginForm() {
       </header>
 
       <section className="rounded-[28px] border border-accent/30 bg-white p-6 shadow-soft md:p-9">
-        <h1 className="text-[26px] font-bold tracking-tight">Hi, Welcome back</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Hii, Welcome back</h1>
         <p className="mb-6 mt-2 text-[14.5px] leading-relaxed text-muted">Sign in to manage your collections and track every contribution.</p>
 
         <form onSubmit={submit} noValidate className="space-y-4">
