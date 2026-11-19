@@ -184,3 +184,18 @@ export function verifyPayoutCallback(payload: Record<string, unknown>, headers: 
   const actual = Buffer.from(given.toLowerCase());
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
+
+/** Setup check: getBanks with the Business API keys (fails with an IP or credentials error if not whitelisted). */
+export async function businessPing(): Promise<{ mode: BusinessMode; ok: boolean; detail: string }> {
+  const mode = businessMode();
+  if (mode === "mock") return { mode, ok: false, detail: "No Business API keys set (PAGA_BUSINESS_PUBLIC_KEY, PAGA_BUSINESS_PASSWORD, PAGA_BUSINESS_HASH_KEY), so payouts and refunds are in demo mode." };
+  const referenceNumber = ref("KC");
+  try {
+    const r = await call<BaseResponse & { banks?: unknown[] }>("getBanks", { referenceNumber }, [referenceNumber]);
+    return ok(r)
+      ? { mode, ok: true, detail: `Connected to Paga Business API (${(r.banks ?? []).length} banks returned).` }
+      : { mode, ok: false, detail: `Paga replied ${r.responseCode}: ${r.message ?? "no message"}` };
+  } catch (e) {
+    return { mode, ok: false, detail: String((e as Error).message).slice(0, 300) };
+  }
+}

@@ -300,3 +300,20 @@ export function buildMockCallback(reference: string, amount: number, notificatio
   ]);
   return payload;
 }
+
+/** Setup check: one harmless Collect call (/banks) to confirm the keys, hash and IP whitelist work. */
+export async function collectPing(): Promise<{ mode: PagaMode; ok: boolean; detail: string }> {
+  const mode = pagaMode();
+  if (mode === "mock") return { mode, ok: false, detail: "No Collect keys set (PAGA_PUBLIC_KEY, PAGA_SECRET_KEY, PAGA_HASH_KEY), so the app is in demo mode." };
+  const referenceNumber = `KCHK${Date.now()}`;
+  try {
+    const r = await call<{ responseCode?: number | string; statusCode?: number | string; statusMessage?: string; message?: string; banks?: unknown[] }>(
+      "banks", { referenceNumber }, hashOf([referenceNumber]),
+    );
+    const code = r.statusCode ?? r.responseCode;
+    const good = Number(code) === 0;
+    return { mode, ok: good, detail: good ? `Connected to Paga Collect (${(r.banks ?? []).length} banks returned).` : `Paga replied ${code}: ${r.statusMessage ?? r.message ?? "no message"}` };
+  } catch (e) {
+    return { mode, ok: false, detail: String((e as Error).message).slice(0, 300) };
+  }
+}
