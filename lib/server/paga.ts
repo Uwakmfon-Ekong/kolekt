@@ -423,6 +423,69 @@ export async function collectTestPaymentRequest(input: { phoneNumber: string; ca
   }
 }
 
+/**
+ * Setup check: try every Collect route once (sandbox only) and report each reply side by side.
+ * Comparing them shows whether the whole Collect account is failing or only some features.
+ */
+export async function collectRouteSweep(input: { phoneNumber: string; callBackUrl: string }) {
+  const mode = pagaMode();
+  if (mode !== "sandbox") return { mode, detail: mode === "mock" ? "No Collect keys set, so the app is in demo mode." : "This test only runs against the sandbox." };
+  const auth = Buffer.from(`${process.env.PAGA_PUBLIC_KEY}:${process.env.PAGA_SECRET_KEY}`).toString("base64");
+  const ACCESS_BANK = "40090E2F-7446-4217-9345-7BBAB7043C4C"; // from /banks
+  const stamp = Date.now();
+  const expiry = pagaDate(new Date(stamp + 24 * 3600e3));
+  const phone = input.phoneNumber;
+  const payment = (ref: string, methods: string[], payer: Record<string, string>) => ({
+    referenceNumber: ref, amount: 50, currency: "NGN", payer, payee: { name: "Kolekt test" },
+    expiryDateTimeUTC: expiry, isSuppressMessages: true, payerCollectionFeeShare: 1, payeeCollectionFeeShare: 0,
+    isAllowPartialPayments: false, isAllowOverPayments: false, callBackUrl: input.callBackUrl, paymentMethods: methods,
+  });
+  const tests: { name: string; endpoint: string; body: Record<string, unknown>; hashFields: (string | number)[]; working: string }[] = [
+    { name: "Get banks", endpoint: "banks", body: { referenceNumber: `KSW-B-${stamp}` }, hashFields: [`KSW-B-${stamp}`],
+      working: "statusCode 0 with a list of banks" },
+    { name: "Payment status (made-up reference)", endpoint: "status", body: { referenceNumber: `KSW-NOPE-${stamp}` }, hashFields: [`KSW-NOPE-${stamp}`],
+      working: "statusCode 121 'not found' (a proper answer) rather than -1" },
+    { name: "Payment history (last 7 days)", endpoint: "history",
+      body: { referenceNumber: `KSW-H-${stamp}`, startDateTimeUTC: pagaDate(new Date(stamp - 7 * 864e5)), endDateTimeUTC: pagaDate(new Date(stamp)) },
+      hashFields: [`KSW-H-${stamp}`], working: "statusCode 0, probably with no items" },
+    { name: "Payment request: bank transfer", endpoint: "paymentRequest",
+      body: payment(`KSW-T-${stamp}`, ["BANK_TRANSFER"], { name: "Bello Ramon", phoneNumber: phone }),
+      hashFields: [`KSW-T-${stamp}`, 50, "NGN", phone], working: "statusCode 0 with an AccountNumber" },
+    { name: "Payment request: bank USSD", endpoint: "paymentRequest",
+      body: payment(`KSW-U-${stamp}`, ["FUNDING_USSD"], { name: "Bello Ramon", phoneNumber: phone, bankId: ACCESS_BANK }),
+      hashFields: [`KSW-U-${stamp}`, 50, "NGN", phone], working: "statusCode 0 with a USSD short code" },
+    { name: "Persistent account (register)", endpoint: "registerPersistentPaymentAccount",
+      body: { referenceNumber: `KSW-P-${stamp}`, phoneNumber: phone, firstName: "Bello", lastName: "Ramon", accountName: "Bello Ramon", accountReference: `KOLEKT${stamp}` },
+      hashFields: [`KSW-P-${stamp}`, `KOLEKT${stamp}`], working: "statusCode 0 with an accountNumber" },
+  ];
+  const results = [];
+  for (const t of tests) {
+    const started = Date.now();
+    try {
+      const res = await fetch(BASE.sandbox + t.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Basic ${auth}`, hash: sha512(t.hashFields.join("") + hashKey()) },
+        body: JSON.stringify(t.body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(30000),
+      });
+      const text = await res.text();
+      let reply: unknown = text;
+      try { reply = JSON.parse(text); } catch { /* not JSON */ }
+      const r = reply as { statusCode?: string; statusMessage?: string };
+      results.push({
+        route: `POST /${t.endpoint}`, test: t.name, httpStatus: res.status, ms: Date.now() - started,
+        statusCode: r?.statusCode ?? null, statusMessage: r?.statusMessage ?? null,
+        verdict: String(r?.statusCode) === "-1" ? "✗ system error" : res.status === 401 ? "✗ rejected (auth/hash)" : "✓ Paga answered properly",
+        ifWorkingExpect: t.working, sentBody: t.body, reply: typeof reply === "string" ? reply.slice(0, 400) : reply,
+      });
+    } catch (e) {
+      results.push({ route: `POST /${t.endpoint}`, test: t.name, error: String((e as Error).message).slice(0, 200) });
+    }
+  }
+  return { mode, ranAt: new Date(stamp).toISOString(), summary: results.map((r) => `${r.route.padEnd(36)} ${"verdict" in r ? r.verdict : "error"}`), results };
+}
+
 /** Setup check: one harmless Collect call (/banks), reporting exactly what Paga replied. */
 export async function collectPing(): Promise<{ mode: PagaMode; ok: boolean; detail: string; httpStatus?: number; pagaReplied?: string; keys?: Record<string, string> }> {
   const mode = pagaMode();
