@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, LinkButton } from "@/components/Button";
 import { Card, EmptyState } from "@/components/Card";
 import Icon from "@/components/Icon";
 import { useApp } from "@/lib/create-collection";
 
 export default function PublishedPage() {
-  const { published, reset } = useApp();
+  const { published, reset, hydrated } = useApp();
   const [copied, setCopied] = useState(false);
+  // The collection is saved, so clear the wizard: the next "Create a collection" starts fresh
+  // even if the organiser leaves this page without pressing one of the buttons below.
+  useEffect(() => { if (hydrated && published) reset(); }, [hydrated, published, reset]);
 
   if (!published) {
     return (

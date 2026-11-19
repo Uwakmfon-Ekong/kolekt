@@ -74,7 +74,11 @@ export default function CollectionCard({ c, meta, onClose }: { c: Collection; me
             <Link role="menuitem" href={`/collections/${c.id}#edit`} className="block px-4 py-2.5 hover:bg-bg">Edit</Link>
             <button role="menuitem" onClick={copy} className="block w-full px-4 py-2.5 text-left hover:bg-bg">{copied ? "Link copied" : "Share link"}</button>
             {!done && (
-              <button role="menuitem" onClick={() => { setOpen(false); onClose?.(); }} className="block w-full px-4 py-2.5 text-left text-[#C2344D] hover:bg-bg">Close collection</button>
+              <button role="menuitem" onClick={() => {
+                setOpen(false);
+                // Same confirmation as the collection page: closing stops payments.
+                if (window.confirm(`Close “${c.name}”? People won’t be able to pay into it any more. You can reopen it later.`)) onClose?.();
+              }} className="block w-full px-4 py-2.5 text-left text-[#C2344D] hover:bg-bg">Close collection</button>
             )}
           </div>
         )}

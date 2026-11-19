@@ -92,7 +92,11 @@ export default function CollectionView({ id, contributions, qr, balance, payouts
       ? { icon: "clock" as const, label: "Outstanding", value: naira(summary.outstanding), sub: "still owed" }
       : { icon: "trend" as const, label: "Average", value: naira(summary.contributors ? Math.round(summary.collected / summary.contributors) : 0), sub: "per contributor" },
   ] : [];
-  const reopen = async () => { setReopening(true); await reopenCollectionAction(c.id); refresh(); setReopening(false); };
+  const reopen = async () => {
+    const expired = c.publicationStatus === "ACTIVE"; // closed by its deadline, not by the organiser
+    if (expired && !window.confirm("This collection’s deadline has passed. Reopening it removes the deadline so people can pay again. Continue?")) return;
+    setReopening(true); await reopenCollectionAction(c.id); refresh(); setReopening(false);
+  };
   const copy = async () => {
     try { await navigator.clipboard.writeText(url); } catch { /* unavailable */ }
     setCopied(true); setTimeout(() => setCopied(false), 1500);
@@ -256,9 +260,9 @@ export default function CollectionView({ id, contributions, qr, balance, payouts
 
           {!done ? (
             <Button variant="secondary" onClick={close} loading={closing} loadingText="Closing…" className="!text-[#C2344D]">Close collection</Button>
-          ) : c.publicationStatus === "CLOSED" ? (
+          ) : (
             <Button variant="secondary" onClick={reopen} loading={reopening} loadingText="Reopening…">Reopen collection</Button>
-          ) : null}
+          )}
           {canDelete && (
             <div>
               <button onClick={remove} disabled={deleting} className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold text-[#C2344D] transition hover:bg-[#C2344D]/8 disabled:opacity-60">

@@ -128,8 +128,11 @@ export async function listContributors(c: Pick<CollectionRow, "id" | "collection
 
 /** Dashboard totals: unique contributors everywhere, and what's still owed on open fixed collections. */
 export async function organiserOutstanding(organiserId: string) {
-  const cols = await q<Pick<CollectionRow, "id" | "collection_type" | "fixed_amount" | "status">>(
-    "select id, collection_type, fixed_amount, status from collections where organiser_id = $1",
+  // "open" mirrors isOpen() in collections.ts: active and not past its deadline (Lagos time).
+  const cols = await q<Pick<CollectionRow, "id" | "collection_type" | "fixed_amount"> & { open: boolean }>(
+    `select id, collection_type, fixed_amount,
+            (status = 'active' and (deadline is null or deadline >= (now() at time zone 'Africa/Lagos')::date)) as open
+       from collections where organiser_id = $1`,
     [organiserId],
   );
   let outstanding = 0;
@@ -137,8 +140,8 @@ export async function organiserOutstanding(organiserId: string) {
   for (const c of cols) {
     const { summary } = await listContributors(c);
     contributors += summary.contributors;
-    // Only open collections still expect money.
-    if (c.collection_type === "fixed" && c.status === "active") outstanding += summary.outstanding;
+    // Only open collections still expect money; one that closed (or passed its deadline) doesn't.
+    if (c.collection_type === "fixed" && c.open) outstanding += summary.outstanding;
   }
   return { outstanding, contributors };
 }

@@ -35,11 +35,15 @@ export async function publishCollectionAction(draft: z.input<typeof DraftSchema>
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const d = parsed.data;
 
-  const amount = Number(d.amount || 0);
-  const minimum = Number(d.minimum || 0);
-  const target = Number(d.target || 0);
-  if (d.type === "fixed" && !(amount >= 100)) return { ok: false, error: "The fixed amount must be at least ₦100." };
-  if (d.type === "flexible" && minimum && target && minimum > target) return { ok: false, error: "The minimum contribution can’t be more than the target." };
+  // Only the fields for the chosen type count. The wizard keeps the other type's values in the
+  // draft (e.g. a target typed before switching to Fixed), and they must not be saved.
+  const flexible = d.type === "flexible";
+  const amount = flexible ? 0 : Number(d.amount || 0);
+  const minimum = flexible ? Number(d.minimum || 0) : 0;
+  const target = flexible ? Number(d.target || 0) : 0;
+  if (!flexible && !(amount >= 100)) return { ok: false, error: "The fixed amount must be at least ₦100." };
+  if (minimum && minimum < 100) return { ok: false, error: "The minimum contribution must be at least ₦100." };
+  if (minimum && target && minimum > target) return { ok: false, error: "The minimum contribution can’t be more than the target." };
   if (d.deadline) {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
     if (d.deadline < today) return { ok: false, error: "The deadline must be today or later." };
@@ -64,10 +68,11 @@ export async function publishCollectionAction(draft: z.input<typeof DraftSchema>
          returning id`,
         [
           me.id, publicCode, slug, d.name, d.description, d.organisation, d.image ?? null, d.type,
-          d.type === "fixed" ? amount : null,
-          d.type === "flexible" && minimum ? minimum : null,
+          flexible ? null : amount,
+          minimum || null,
           target || null,
-          d.allowAboveTarget,
+          // Only meaningful with a target. Without one there is no cap, so keep the permissive default.
+          target ? d.allowAboveTarget : true,
           d.deadline || null,
           JSON.stringify(fieldsList),
           d.type === "fixed" && d.allowPartPayments,
@@ -110,9 +115,19 @@ export async function closeCollectionAction(id: string): Promise<ActionResult> {
   return { ok: true, data: undefined };
 }
 
+/**
+ * Reopen a closed collection. A collection also closes on its own once its deadline passes,
+ * so a past deadline is cleared here; otherwise it would stay closed after "reopening".
+ */
 export async function reopenCollectionAction(id: string): Promise<ActionResult> {
   const me = await requireOrganiser();
-  const rows = await q("update collections set status = 'active' where id = $1 and organiser_id = $2 returning id", [id, me.id]);
+  const rows = await q(
+    `update collections
+        set status = 'active',
+            deadline = case when deadline < (now() at time zone 'Africa/Lagos')::date then null else deadline end
+      where id = $1 and organiser_id = $2 returning id`,
+    [id, me.id],
+  );
   if (!rows.length) return { ok: false, error: "Collection not found." };
   revalidatePath("/", "layout");
   return { ok: true, data: undefined };

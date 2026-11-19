@@ -188,11 +188,16 @@ const PAID_STATES = new Set(["SUCCESSFUL", "SUCCESS", "PAID", "PAID_NOT_SETTLED"
 async function statusCheck(reference: string): Promise<Verification | null> {
   try {
     const r = await call<Record<string, unknown>>("status", { referenceNumber: reference }, hashOf([reference]));
+    // The outer statusCode only says the lookup worked. Per Paga's docs the payment itself is
+    // reported in data.statusCode: "0" = paid, "1" = in process, "2" = partly paid, "-2" = expired.
     if (String(r.statusCode) !== "0") return null; // not available, or an error: try the next way
     const data = (r.data ?? r) as Record<string, unknown>;
+    const code = r.data ? String(data.statusCode ?? "") : "";
     const state = String(data.status ?? data.paymentStatus ?? data.state ?? r.status ?? "").toUpperCase();
-    const amount = Number(data.amountPaid ?? data.cumulativePaymentAmount ?? data.paymentAmount ?? data.amount ?? 0);
-    return { paid: PAID_STATES.has(state), amountPaid: amount, detail: `status: ${state || "unknown"}` };
+    if (!code && !state) return null; // a reply shape we don't recognise: let the history check decide
+    const paid = code === "0" || PAID_STATES.has(state);
+    const amount = Number(data.amountPaid ?? data.cumulativePaymentAmount ?? data.paymentAmount ?? data.totalPaymentAmount ?? data.amount ?? 0);
+    return { paid, amountPaid: amount, detail: `status: ${code ? `code ${code} ${String(data.statusMessage ?? "")}`.trim() : state}` };
   } catch (e) {
     console.error("[paga] status check failed", reference, (e as Error).message);
     return null;

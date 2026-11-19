@@ -87,7 +87,7 @@ export default function CollectionsPage() {
         <div className="rounded-3xl border border-dashed border-accent bg-card/60 px-6 py-12 text-center">
           <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white text-primary shadow-sm"><Icon name="layers" className="h-7 w-7" /></span>
           <p className="mt-4 text-base font-bold">{q ? "No collections found" : `No ${tab.toLowerCase()} collections yet`}</p>
-          <p className="mt-1 text-sm text-muted">{q ? "Try a different name." : "Closed collections will appear here."}</p>
+          <p className="mt-1 text-sm text-muted">{q ? "Try a different name." : tab === "Completed" ? "Closed collections will appear here." : "Create a collection to start receiving contributions."}</p>
         </div>
       )}
     </div>

@@ -37,8 +37,8 @@ function validate(d: CollectionDraft) {
   if (d.description.trim().length < 10) issues.push({ label: "Description (at least 10 characters)", href: DETAILS });
   if (!d.organisation.trim()) issues.push({ label: "Organisation name", href: DETAILS });
   if (!d.type) issues.push({ label: "Contribution type", href: CONTRIBUTION });
-  if (d.type === "fixed" && !(Number(d.amount) > 0)) issues.push({ label: "A valid fixed contribution amount", href: CONTRIBUTION });
-  if (d.type === "flexible" && d.minimum && !(Number(d.minimum) > 0)) issues.push({ label: "A valid minimum contribution", href: CONTRIBUTION });
+  if (d.type === "fixed" && !(Number(d.amount) >= 100)) issues.push({ label: "A fixed contribution amount of at least ₦100", href: CONTRIBUTION });
+  if (d.type === "flexible" && d.minimum && !(Number(d.minimum) >= 100)) issues.push({ label: "A minimum contribution of at least ₦100", href: CONTRIBUTION });
   if (d.type === "flexible" && d.target && !(Number(d.target) > 0)) issues.push({ label: "A valid target amount", href: CONTRIBUTION });
   if (d.type === "flexible" && d.minimum && d.target && Number(d.minimum) > Number(d.target)) issues.push({ label: "Minimum contribution cannot exceed the target", href: CONTRIBUTION });
   if (d.deadline) {
@@ -58,8 +58,9 @@ export default function PreviewPage() {
   const [serverError, setServerError] = useState("");
 
   const fixed = draft.type === "fixed";
-  const target = Number(draft.target) || 0;
-  const minimum = Number(draft.minimum) || 0;
+  // A target or minimum typed before switching to Fixed doesn't apply (and isn't saved).
+  const target = fixed ? 0 : Number(draft.target) || 0;
+  const minimum = fixed ? 0 : Number(draft.minimum) || 0;
   const amount = Number(draft.amount) || 0;
 
   const publish = async () => {
@@ -90,7 +91,8 @@ export default function PreviewPage() {
   const details = [
     { label: "Contribution type", value: fixed ? "Fixed amount" : "Flexible amount" },
     ...(fixed ? [{ label: "Required contribution", value: money(amount) }, { label: "Part payments", value: draft.allowPartPayments ? "Allowed" : "Not allowed" }] : minimum ? [{ label: "Minimum contribution", value: money(minimum) }] : []),
-    { label: "Target amount", value: target ? money(target) : "No target set" },
+    ...(fixed ? [] : [{ label: "Target amount", value: target ? money(target) : "No target set" }]),
+    ...(target ? [{ label: "Above target", value: draft.allowAboveTarget ? "Keep accepting payments" : "Stop at the target" }] : []),
     { label: "Deadline", value: dateLabel(draft.deadline) },
   ];
 

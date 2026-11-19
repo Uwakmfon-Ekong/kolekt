@@ -24,10 +24,10 @@ function validate(d: CollectionDraft, today: string): Errors {
   if (!d.type) e.type = "Choose a contribution type to continue.";
   if (d.type === "fixed") {
     if (!d.amount) e.amount = "Enter the contribution amount.";
-    else if (Number(d.amount) <= 0) e.amount = "Amount must be greater than ₦0.";
+    else if (Number(d.amount) < 100) e.amount = "Amount must be at least ₦100.";
   }
   if (d.type === "flexible") {
-    if (d.minimum && Number(d.minimum) <= 0) e.minimum = "Minimum must be greater than ₦0.";
+    if (d.minimum && Number(d.minimum) < 100) e.minimum = "Minimum must be at least ₦100.";
     if (d.target && Number(d.target) <= 0) e.target = "Target must be greater than ₦0.";
     if (!e.minimum && !e.target && d.minimum && d.target && Number(d.minimum) > Number(d.target))
       e.minimum = "Minimum can’t be more than the target amount.";
@@ -148,6 +148,18 @@ export default function ContributionTypePage() {
             icon={<Icon name="layers" className="h-7 w-7" />}>
             <MoneyField id="minimum" label="Minimum Contribution" optional placeholder="e.g. 1,000" value={draft.minimum} onChange={(v) => change({ minimum: v })} error={errors.minimum} />
             <MoneyField id="target" label="Target Amount" optional placeholder="e.g. 500,000" value={draft.target} onChange={(v) => change({ target: v })} error={errors.target} />
+            {Number(draft.target) > 0 && (
+              <div className="flex items-center justify-between gap-4 rounded-2xl bg-bg p-4">
+                <div className="min-w-0">
+                  <p id="above-l" className="text-sm font-semibold">Allow contributions above target</p>
+                  <p className="mt-0.5 text-xs text-muted">Keep accepting payments after the goal is reached.</p>
+                </div>
+                <button type="button" role="switch" aria-checked={draft.allowAboveTarget} aria-labelledby="above-l" onClick={() => update({ allowAboveTarget: !draft.allowAboveTarget })}
+                  className={`relative h-8 w-14 flex-none rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${draft.allowAboveTarget ? "bg-primary" : "bg-accent/60"}`}>
+                  <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${draft.allowAboveTarget ? "translate-x-6" : ""}`} />
+                </button>
+              </div>
+            )}
           </TypeCard>
           <Msg error={errors.type} />
         </div>
@@ -159,16 +171,6 @@ export default function ContributionTypePage() {
             <input id="deadline" type="date" min={today || undefined} value={draft.deadline} onChange={(e) => change({ deadline: e.target.value })} aria-invalid={!!errors.deadline}
               className={`${base} h-[54px] px-4 ${errors.deadline ? bad : ok}`} />
             <Msg error={errors.deadline} />
-          </div>
-          <div className="flex items-center justify-between gap-4 rounded-2xl bg-bg p-4">
-            <div className="min-w-0">
-              <p id="above-l" className="text-sm font-semibold">Allow contributions above target</p>
-              <p className="mt-0.5 text-xs text-muted">Keep accepting payments after the goal is reached.</p>
-            </div>
-            <button type="button" role="switch" aria-checked={draft.allowAboveTarget} aria-labelledby="above-l" onClick={() => update({ allowAboveTarget: !draft.allowAboveTarget })}
-              className={`relative h-8 w-14 flex-none rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${draft.allowAboveTarget ? "bg-primary" : "bg-accent/60"}`}>
-              <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${draft.allowAboveTarget ? "translate-x-6" : ""}`} />
-            </button>
           </div>
         </section>
       </div>

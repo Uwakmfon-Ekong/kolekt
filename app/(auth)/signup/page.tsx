@@ -48,7 +48,7 @@ export default function SignupPage() {
     if (!file.type.startsWith("image/")) return setPhotoErr("Please choose an image file.");
     if (file.size > 8 * 1024 * 1024) return setPhotoErr("Image must be under 8 MB.");
     setPhotoErr("");
-    resizeImage(file, 320).then(setPhoto).catch(() => setPhotoErr("We couldn’t read that image. Try another one."));
+    resizeImage(file, 320, 0.82, 390_000).then(setPhoto).catch(() => setPhotoErr("We couldn’t read that image. Try another one."));
   };
 
   const submit = async (ev: React.FormEvent) => {

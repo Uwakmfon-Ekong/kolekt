@@ -46,7 +46,8 @@ export default function DetailsPage() {
     if (!f.type.startsWith("image/")) return setImgError("Please choose an image file.");
     if (f.size > 10 * 1024 * 1024) return setImgError("Image must be under 10 MB.");
     setImgError("");
-    resizeImage(f, 1280, 0.8).then((image) => update({ image })).catch(() => setImgError("We couldn’t read that image. Try another one."));
+    // The server accepts covers up to 600,000 characters (see publishCollectionAction).
+    resizeImage(f, 1280, 0.8, 580_000).then((image) => update({ image })).catch(() => setImgError("We couldn’t read that image. Try another one."));
   };
 
   const next = () => {
@@ -112,7 +113,7 @@ export default function DetailsPage() {
               <button type="button" onClick={() => fileRef.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-accent bg-bg px-4 py-7 text-center transition hover:border-primary hover:bg-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
                 <span className="grid h-12 w-12 place-items-center rounded-full bg-primary text-white shadow-cta"><Icon name="camera" className="h-5 w-5" /></span>
                 <span className="text-sm font-semibold">Upload an image</span>
-                <span className="text-xs text-muted">PNG or JPG, up to 5 MB</span>
+                <span className="text-xs text-muted">PNG or JPG, up to 10 MB</span>
               </button>
             )}
             {imgError && <p role="alert" className="mt-1.5 px-0.5 text-xs font-medium text-[#C2344D]">{imgError}</p>}
