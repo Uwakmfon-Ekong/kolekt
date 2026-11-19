@@ -185,17 +185,35 @@ export function verifyPayoutCallback(payload: Record<string, unknown>, headers: 
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-/** Setup check: getBanks with the Business API keys (fails with an IP or credentials error if not whitelisted). */
-export async function businessPing(): Promise<{ mode: BusinessMode; ok: boolean; detail: string }> {
+/** Setup check: getBanks with the Business API keys, reporting exactly what Paga replied. */
+export async function businessPing(): Promise<{ mode: BusinessMode; ok: boolean; detail: string; httpStatus?: number; pagaReplied?: string; keys?: Record<string, string> }> {
   const mode = businessMode();
-  if (mode === "mock") return { mode, ok: false, detail: "No Business API keys set (PAGA_BUSINESS_PUBLIC_KEY, PAGA_BUSINESS_PASSWORD, PAGA_BUSINESS_HASH_KEY), so payouts and refunds are in demo mode." };
+  const hint = (v: string | undefined) => {
+    if (!v) return "missing";
+    const issues = [];
+    if (v !== v.trim()) issues.push("has spaces or a line break at the start/end, remove them");
+    if (/^["']|["']$/.test(v.trim())) issues.push("wrapped in quotes, remove them");
+    return `${v.length} characters${issues.length ? " (" + issues.join("; ") + ")" : ""}`;
+  };
+  const keys = { PAGA_BUSINESS_PUBLIC_KEY: hint(process.env.PAGA_BUSINESS_PUBLIC_KEY), PAGA_BUSINESS_PASSWORD: hint(process.env.PAGA_BUSINESS_PASSWORD), PAGA_BUSINESS_HASH_KEY: hint(process.env.PAGA_BUSINESS_HASH_KEY) };
+  if (mode === "mock") return { mode, ok: false, detail: "No Business API keys set (PAGA_BUSINESS_PUBLIC_KEY, PAGA_BUSINESS_PASSWORD, PAGA_BUSINESS_HASH_KEY), so payouts and refunds are in demo mode.", keys };
   const referenceNumber = ref("KC");
   try {
-    const r = await call<BaseResponse & { banks?: unknown[] }>("getBanks", { referenceNumber }, [referenceNumber]);
-    return ok(r)
-      ? { mode, ok: true, detail: `Connected to Paga Business API (${(r.banks ?? []).length} banks returned).` }
-      : { mode, ok: false, detail: `Paga replied ${r.responseCode}: ${r.message ?? "no message"}` };
+    const res = await fetch(BASE[mode] + "getBanks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json", Accept: "application/json",
+        principal: process.env.PAGA_BUSINESS_PUBLIC_KEY!, credentials: process.env.PAGA_BUSINESS_PASSWORD!, hash: hashOf([referenceNumber]),
+      },
+      body: JSON.stringify({ referenceNumber }),
+      cache: "no-store",
+    });
+    const text = await res.text();
+    let r: Record<string, unknown> = {};
+    try { r = JSON.parse(text); } catch { /* not JSON */ }
+    const good = res.ok && Number(r.responseCode) === 0;
+    return { mode, ok: good, httpStatus: res.status, detail: good ? "Connected to Paga Business API." : `Paga replied ${r.responseCode ?? "(no code)"}: ${r.message ?? r.error ?? "see pagaReplied"}`, pagaReplied: text.slice(0, 400), keys };
   } catch (e) {
-    return { mode, ok: false, detail: String((e as Error).message).slice(0, 300) };
+    return { mode, ok: false, detail: String((e as Error).message).slice(0, 300), keys };
   }
 }

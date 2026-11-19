@@ -301,19 +301,36 @@ export function buildMockCallback(reference: string, amount: number, notificatio
   return payload;
 }
 
-/** Setup check: one harmless Collect call (/banks) to confirm the keys, hash and IP whitelist work. */
-export async function collectPing(): Promise<{ mode: PagaMode; ok: boolean; detail: string }> {
+/** Describes a key without revealing it: length, and whether it has stray spaces or quotes from pasting. */
+export function keyHint(v: string | undefined) {
+  if (!v) return "missing";
+  const issues = [];
+  if (v !== v.trim()) issues.push("has spaces or a line break at the start/end, remove them");
+  if (/^["']|["']$/.test(v.trim())) issues.push("wrapped in quotes, remove them");
+  return `${v.length} characters${issues.length ? " (" + issues.join("; ") + ")" : ""}`;
+}
+
+/** Setup check: one harmless Collect call (/banks), reporting exactly what Paga replied. */
+export async function collectPing(): Promise<{ mode: PagaMode; ok: boolean; detail: string; httpStatus?: number; pagaReplied?: string; keys?: Record<string, string> }> {
   const mode = pagaMode();
-  if (mode === "mock") return { mode, ok: false, detail: "No Collect keys set (PAGA_PUBLIC_KEY, PAGA_SECRET_KEY, PAGA_HASH_KEY), so the app is in demo mode." };
+  const keys = { PAGA_PUBLIC_KEY: keyHint(process.env.PAGA_PUBLIC_KEY), PAGA_SECRET_KEY: keyHint(process.env.PAGA_SECRET_KEY), PAGA_HASH_KEY: keyHint(process.env.PAGA_HASH_KEY) };
+  if (mode === "mock") return { mode, ok: false, detail: "No Collect keys set (PAGA_PUBLIC_KEY, PAGA_SECRET_KEY, PAGA_HASH_KEY), so the app is in demo mode.", keys };
   const referenceNumber = `KCHK${Date.now()}`;
   try {
-    const r = await call<{ responseCode?: number | string; statusCode?: number | string; statusMessage?: string; message?: string; banks?: unknown[] }>(
-      "banks", { referenceNumber }, hashOf([referenceNumber]),
-    );
+    const auth = Buffer.from(`${process.env.PAGA_PUBLIC_KEY}:${process.env.PAGA_SECRET_KEY}`).toString("base64");
+    const res = await fetch(BASE[mode] + "banks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Basic ${auth}`, hash: hashOf([referenceNumber]) },
+      body: JSON.stringify({ referenceNumber }),
+      cache: "no-store",
+    });
+    const text = await res.text();
+    let r: Record<string, unknown> = {};
+    try { r = JSON.parse(text); } catch { /* not JSON */ }
     const code = r.statusCode ?? r.responseCode;
-    const good = Number(code) === 0;
-    return { mode, ok: good, detail: good ? `Connected to Paga Collect (${(r.banks ?? []).length} banks returned).` : `Paga replied ${code}: ${r.statusMessage ?? r.message ?? "no message"}` };
+    const good = res.ok && Number(code) === 0;
+    return { mode, ok: good, httpStatus: res.status, detail: good ? "Connected to Paga Collect." : `Paga replied ${code ?? "(no code)"}: ${r.statusMessage ?? r.message ?? r.error ?? "see pagaReplied"}`, pagaReplied: text.slice(0, 400), keys };
   } catch (e) {
-    return { mode, ok: false, detail: String((e as Error).message).slice(0, 300) };
+    return { mode, ok: false, detail: String((e as Error).message).slice(0, 300), keys };
   }
 }
