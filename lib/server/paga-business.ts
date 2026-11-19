@@ -115,6 +115,18 @@ export async function validateAccount(input: { bankUUID: string; accountNumber: 
     { referenceNumber, amount, currency: "NGN", destinationBankUUID: input.bankUUID, destinationBankAccountNumber: input.accountNumber },
     [referenceNumber, amount, input.bankUUID, input.accountNumber],
   );
+  // validateDepositToBank checks a pretend transfer, so Paga also checks that our business wallet
+  // could pay it. The name lookup is all we need here: if Paga found the account holder, use the
+  // name even when the wallet balance is too low for the pretend transfer.
+  if (r.destinationAccountHolderNameAtBank && (ok(r) || /insufficient|balance|fund/i.test(r.message ?? ""))) {
+    return { ok: true, accountName: r.destinationAccountHolderNameAtBank, fee: Number(r.fee ?? 0) };
+  }
+  if (/insufficient|balance|fund your wallet/i.test(r.message ?? "")) {
+    return {
+      ok: false,
+      error: "Paga couldn’t check this account because the Kolekt Paga business wallet is empty (Paga checks it can cover a test transfer). Add funds to the Paga business wallet, then try again.",
+    };
+  }
   if (!ok(r) || !r.destinationAccountHolderNameAtBank) {
     return { ok: false, error: r.message || "We couldn’t verify that account. Check the number and bank." };
   }

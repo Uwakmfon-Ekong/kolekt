@@ -9,6 +9,13 @@ import { PayoutError, refreshPayout, requestPayout, requestRefund, type Payout }
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
+/**
+ * Account-name checks go through Paga's validateDepositToBank, which also checks that our
+ * business wallet could cover a transfer of this size plus fee. Keep it small, so checking an
+ * account doesn't need much money in the wallet (₦1,000 needed ₦1,053.75).
+ */
+const VERIFY_AMOUNT = 100;
+
 export async function listBanksAction(): Promise<Result<Bank[]>> {
   await requireOrganiser();
   try {
@@ -29,7 +36,7 @@ export async function verifyAccountAction(bankUUID: string, accountNumber: strin
   try {
     const bank = await bankByUuid(String(bankUUID));
     if (!bank) return { ok: false, error: "Choose your bank." };
-    const r = await validateAccount({ bankUUID: bank.uuid, accountNumber: String(accountNumber).trim(), amount: 1000, fallbackName: me.full_name });
+    const r = await validateAccount({ bankUUID: bank.uuid, accountNumber: String(accountNumber).trim(), amount: VERIFY_AMOUNT, fallbackName: me.full_name });
     if (!r.ok) return { ok: false, error: r.error };
     return { ok: true, data: { accountName: r.accountName, bankName: bank.name } };
   } catch (e) {
@@ -86,7 +93,7 @@ export async function verifyRecipientAction(bankUUID: string, accountNumber: str
   try {
     const bank = await bankByUuid(String(bankUUID));
     if (!bank) return { ok: false, error: "Choose the bank." };
-    const r = await validateAccount({ bankUUID: bank.uuid, accountNumber: String(accountNumber).trim(), amount: 1000, fallbackName: String(name).slice(0, 60) || "Contributor" });
+    const r = await validateAccount({ bankUUID: bank.uuid, accountNumber: String(accountNumber).trim(), amount: VERIFY_AMOUNT, fallbackName: String(name).slice(0, 60) || "Contributor" });
     if (!r.ok) return { ok: false, error: r.error };
     return { ok: true, data: { accountName: r.accountName, bankName: bank.name } };
   } catch (e) {
