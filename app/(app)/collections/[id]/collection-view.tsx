@@ -9,14 +9,12 @@ import Icon from "@/components/Icon";
 import WalletIllustration from "@/components/WalletIllustration";
 import { LinkButton } from "@/components/Button";
 import { useApp } from "@/lib/create-collection";
-import { naira, percent, timeAgo, type Balance, type Contribution, type ContributorSummary, type MemberStatus, type PayoutView } from "@/lib/data";
+import { methodLabel, naira, percent, timeAgo, type Balance, type Contribution, type ContributorSummary, type MemberStatus, type PayoutView } from "@/lib/data";
 import { useRouter } from "next/navigation";
 import MembersCard from "@/components/MembersCard";
 import { setPublicNamesAction } from "@/app/actions/members";
 import WithdrawCard from "@/components/WithdrawCard";
 import { deleteCollectionAction, reopenCollectionAction } from "@/app/actions/collections";
-
-const methodLabel = (m: string) => (m.includes("USSD") ? "USSD" : m.includes("CARD") ? "Card" : m.includes("WALLET") || m.includes("REQUEST_MONEY") ? "Paga wallet" : "Bank transfer");
 
 export default function CollectionView({ id, contributions, qr, balance, payouts, members, summary }: {
   id: string; contributions: Contribution[]; qr: string | null; balance: Balance; payouts: PayoutView[]; members: MemberStatus; summary: ContributorSummary | null;

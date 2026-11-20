@@ -120,7 +120,7 @@ export type PaymentCheck =
 
 export type Notice = { id: string; kind: "payment" | "flag" | "payout_ok" | "payout_failed" | "payout_processing"; title: string; text: string; at: string; href: string };
 
-export const methodLabel = (m: string) => (m.includes("USSD") ? "USSD" : m.includes("CARD") ? "Card" : m.includes("WALLET") || m.includes("REQUEST_MONEY") ? "Paga wallet" : "Bank transfer");
+export const methodLabel = (m: string) => (m.includes("CHECKOUT") ? "Paga Checkout" : m.includes("USSD") ? "USSD" : m.includes("CARD") ? "Card" : m.includes("WALLET") || m.includes("REQUEST_MONEY") ? "Paga wallet" : "Bank transfer");
 
 export const naira = (n: number) => "₦" + Number(n || 0).toLocaleString("en-NG");
 export const percent = (c: Collection) => (c.target ? Math.round((c.collected / c.target) * 100) : 0);

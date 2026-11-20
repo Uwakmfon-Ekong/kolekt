@@ -160,12 +160,16 @@ export async function settleTransaction(
   reference: string,
   hints: { providerReference?: string; paymentMethod?: string; signedCallback?: boolean } = {},
 ): Promise<SettleResult> {
-  const [pre] = await q<{ status: string; created_at: string }>("select status, created_at from transactions where reference = $1", [reference]);
+  const [pre] = await q<{ status: string; created_at: string; amount: number; amount_to_pay: number | null }>(
+    "select status, created_at, amount, amount_to_pay from transactions where reference = $1",
+    [reference],
+  );
   if (!pre) return { outcome: "not_found" };
   if (pre.status !== "pending") return { outcome: "already_final", status: pre.status };
 
   // The network call happens outside the database transaction, so no row lock is held during I/O.
-  const v = await verifyPayment(reference, new Date(pre.created_at));
+  // The amount is checked too: Checkout's verify must report exactly what the contributor was asked to pay.
+  const v = await verifyPayment(reference, new Date(pre.created_at), Number(pre.amount_to_pay ?? pre.amount));
   // If Paga's status lookups can't be reached at all, a PAYMENT_COMPLETE notification whose
   // hash checked out (it can only come from Paga) is enough on its own. Polling never gets this pass.
   const paid = v.paid || (v.unavailable === true && hints.signedCallback === true);

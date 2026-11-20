@@ -2,16 +2,35 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Logo from "@/components/Logo";
 import { pagaMode } from "@/lib/server/paga";
+import { settleTransaction } from "@/lib/server/payments";
 import { getTransaction } from "@/lib/server/transactions";
 import PayScreen from "./pay-screen";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Complete your payment · Kolekt", robots: { index: false } };
 
-export default async function PayPage({ params }: { params: Promise<{ reference: string }> }) {
+export default async function PayPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ reference: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { reference } = await params;
-  const t = await getTransaction(reference);
+  const sp = await searchParams;
+  let t = await getTransaction(reference);
   if (!t) notFound();
+
+  // Back from Paga Checkout (?charge_reference=…&status_code=0). The query string proves nothing,
+  // so confirm with Paga right away; settleTransaction only counts it if Paga's verify agrees.
+  if (t.status === "pending" && sp.status_code === "0") {
+    try {
+      await settleTransaction(reference, { paymentMethod: "PAGA_CHECKOUT" });
+      t = (await getTransaction(reference)) ?? t;
+    } catch (e) {
+      console.error("[pay] checkout return: settle failed", reference, e);
+    }
+  }
   if (t.status === "successful") redirect(`/receipt/${reference}`);
 
   const i = t.payment_instructions;

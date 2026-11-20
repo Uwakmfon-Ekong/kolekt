@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { q } from "./db";
+import { checkoutUrl, verifyCheckout } from "./paga-checkout";
 
 /**
  * Paga Collect API client.
@@ -27,6 +28,19 @@ export function pagaMode(): PagaMode {
   const { PAGA_PUBLIC_KEY, PAGA_SECRET_KEY, PAGA_HASH_KEY, PAGA_ENV } = process.env;
   if (!PAGA_PUBLIC_KEY || !PAGA_SECRET_KEY || !PAGA_HASH_KEY) return "mock";
   return PAGA_ENV === "live" ? "live" : "sandbox";
+}
+
+/**
+ * How contributors pay when real Paga keys are set:
+ *  - checkout (default): Paga Checkout's hosted page (transfer, card, USSD, Paga wallet),
+ *    confirmed with Checkout's verify endpoint. See lib/server/paga-checkout.ts.
+ *  - collect: a one-time account number from the Collect API (set PAGA_PAYMENT_PROVIDER=collect).
+ * Demo mode (no keys) keeps its own simulated account number.
+ */
+export type PaymentProvider = "mock" | "checkout" | "collect";
+export function paymentProvider(): PaymentProvider {
+  if (pagaMode() === "mock") return "mock";
+  return process.env.PAGA_PAYMENT_PROVIDER === "collect" ? "collect" : "checkout";
 }
 
 function hashKey() {
@@ -106,6 +120,8 @@ export type PaymentInstructions = {
   bankTransfer?: { bankName: string; accountNumber: string };
   ussd?: { code: string; reference?: string };
   pagaLink?: string;
+  /** Paga Checkout: the hosted payment page the contributor is sent to. */
+  checkoutUrl?: string;
   expiresAt: string;
 };
 
@@ -144,6 +160,25 @@ export async function requestPayment(input: {
     };
   }
 
+  // Both Checkout and Collect want an email; fall back to the operations address.
+  const payerEmail = input.payerEmail || process.env.PAGA_PAYER_EMAIL || "payments@kolekt.app";
+
+  if (paymentProvider() === "checkout") {
+    return {
+      amountToPay: input.amount,
+      checkoutUrl: checkoutUrl({
+        reference: input.reference,
+        amount: input.amount,
+        email: payerEmail,
+        phoneNumber: input.payerPhone,
+        // Paga sends the contributor back to the pay page, which confirms the payment with Paga.
+        chargeUrl: input.redirectUrl,
+        callbackUrl: new URL("/api/webhooks/paga-checkout", input.callbackUrl).toString(),
+      }),
+      expiresAt: input.expiresAt.toISOString(),
+    };
+  }
+
   // Organiser absorbs Paga's collection fee by default so payers transfer the exact amount.
   const payerShare = Number(process.env.PAGA_PAYER_FEE_SHARE ?? "0");
   const body = {
@@ -153,7 +188,7 @@ export async function requestPayment(input: {
     payer: {
       name: input.payerName.slice(0, 60),
       ...(input.payerPhone ? { phoneNumber: input.payerPhone } : {}),
-      ...(input.payerEmail ? { email: input.payerEmail } : {}),
+      email: payerEmail,
     },
     // No payee identifier -> funds go to our Paga business account (the processor).
     payee: { name: input.payeeName.slice(0, 60) },
@@ -169,7 +204,7 @@ export async function requestPayment(input: {
   };
   // hash: referenceNumber + amount + currency + payer.phoneNumber + payer.email + hashKey
   // (an empty string for any of them that isn't sent)
-  const hashParts = [input.reference, input.amount, "NGN", input.payerPhone ?? null, input.payerEmail ?? null];
+  const hashParts = [input.reference, input.amount, "NGN", input.payerPhone ?? null, payerEmail];
   const hash = hashOf(hashParts);
   logOutgoing("paymentRequest", body, hashParts, hash);
   const res = await call<PaymentRequestResponse>("paymentRequest", body, hash);
@@ -234,8 +269,24 @@ async function statusCheck(reference: string): Promise<Verification | null> {
  * browser. With a working status call we don't rely on a webhook alone either:
  * a valid hash proves the message came from Paga, this proves Paga's records agree.
  */
-export async function verifyPayment(reference: string, createdAt: Date): Promise<Verification> {
+export async function verifyPayment(reference: string, createdAt: Date, amount?: number): Promise<Verification> {
   const mode = pagaMode();
+
+  if (mode !== "mock" && paymentProvider() === "checkout") {
+    if (amount === undefined) return { paid: false, amountPaid: 0, detail: "checkout verify needs the amount", unavailable: true };
+    try {
+      const v = await verifyCheckout(reference, amount);
+      return {
+        paid: v.paid,
+        amountPaid: v.amount ?? 0,
+        detail: `checkout verify: HTTP ${v.httpStatus}, code ${v.statusCode ?? "?"} ${v.statusMessage ?? ""}`.trim(),
+        // No real answer (server error or auth): let a hash-signed notification decide.
+        unavailable: v.httpStatus >= 500 || v.httpStatus === 401,
+      };
+    } catch (e) {
+      return { paid: false, amountPaid: 0, detail: `checkout verify failed: ${(e as Error).message}`, unavailable: true };
+    }
+  }
 
   if (mode === "mock") {
     const rows = await q<{ total: number | null; n: number }>(
@@ -370,7 +421,7 @@ export function keyHint(v: string | undefined) {
  * reference page, as-is apart from a fresh reference, a future expiry and the given phone number.
  * Sandbox only. Reports the exact request (minus credentials) and Paga's reply.
  */
-export async function collectTestPaymentRequest(input: { phoneNumber: string; callBackUrl: string }) {
+export async function collectTestPaymentRequest(input: { phoneNumber: string; email: string; callBackUrl: string }) {
   const mode = pagaMode();
   if (mode !== "sandbox") return { mode, ok: false, detail: mode === "mock" ? "No Collect keys set, so the app is in demo mode." : "This test only runs against the sandbox." };
   const referenceNumber = `KTEST-${Date.now()}`;
@@ -378,7 +429,7 @@ export async function collectTestPaymentRequest(input: { phoneNumber: string; ca
     referenceNumber,
     amount: 50,
     currency: "NGN",
-    payer: { name: "Bello Ramon", phoneNumber: input.phoneNumber },
+    payer: { name: "Bello Ramon", phoneNumber: input.phoneNumber, email: input.email },
     payee: { name: "Kolekt" },
     expiryDateTimeUTC: pagaDate(new Date(Date.now() + 24 * 3600e3)),
     isSuppressMessages: true,
@@ -389,8 +440,8 @@ export async function collectTestPaymentRequest(input: { phoneNumber: string; ca
     callBackUrl: input.callBackUrl,
     paymentMethods: ["BANK_TRANSFER"],
   };
-  // Hash: referenceNumber + amount + currency + payer.phoneNumber + payer.email (empty) + hashKey
-  const hashInput = `${referenceNumber}${body.amount}${body.currency}${input.phoneNumber}`;
+  // Hash: referenceNumber + amount + currency + payer.phoneNumber + payer.email + hashKey
+  const hashInput = `${referenceNumber}${body.amount}${body.currency}${input.phoneNumber}${input.email}`;
   const hash = sha512(hashInput + hashKey());
   try {
     const auth = Buffer.from(`${process.env.PAGA_PUBLIC_KEY}:${process.env.PAGA_SECRET_KEY}`).toString("base64");

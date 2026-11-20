@@ -1,5 +1,4 @@
 import "server-only";
-import { pagaMode } from "./paga";
 
 /**
  * Paga Checkout (hosted payment page). A separate product from the Collect API.
@@ -12,7 +11,8 @@ import { pagaMode } from "./paga";
  *  3. Confirm on the server with verifyCheckout before counting the money.
  */
 const HOST = { sandbox: "https://beta-checkout.paga.com", live: "https://checkout.paga.com" };
-const host = () => (pagaMode() === "live" ? HOST.live : HOST.sandbox);
+// Same environment switch as the Collect client (lib/server/paga.ts), read directly to avoid a circular import.
+const host = () => (process.env.PAGA_ENV === "live" ? HOST.live : HOST.sandbox);
 
 export function checkoutUrl(input: {
   reference: string;

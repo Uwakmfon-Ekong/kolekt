@@ -11,6 +11,7 @@ type Instructions = {
   bankTransfer?: { bankName: string; accountNumber: string };
   ussd?: { code: string; reference?: string };
   pagaLink?: string;
+  checkoutUrl?: string;
   expiresAt: string;
 };
 
@@ -113,6 +114,43 @@ export default function PayScreen(props: {
 
   const bt = props.instructions?.bankTransfer;
   const i = props.instructions;
+
+  // Paga Checkout: the contributor pays on Paga's own page, then comes back here.
+  if (i?.checkoutUrl) {
+    return (
+      <div className="mt-6 space-y-4">
+        <section className="overflow-hidden rounded-[30px] border border-accent/35 bg-white shadow-soft">
+          <div className="relative overflow-hidden bg-gradient-to-br from-primary to-[#9468EE] px-6 py-6 text-white">
+            <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/10" />
+            <p className="relative text-sm font-medium text-white/80">Amount to pay</p>
+            <p className="relative mt-1 text-[40px] font-extrabold leading-none tracking-tight">{naira(props.amount)}</p>
+            <p className="relative mt-2 text-sm text-white/80">Paying as {props.payerName}</p>
+          </div>
+          <div className="space-y-4 p-6">
+            <a href={i.checkoutUrl} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-base font-bold text-white shadow-cta transition hover:bg-primary-dark">
+              Pay {naira(props.amount)} with Paga <Icon name="chevron" className="h-4 w-4" />
+            </a>
+            <p className="flex gap-2 rounded-2xl bg-card/70 p-3.5 text-xs leading-relaxed text-ink/80">
+              <Icon name="shield" className="h-4 w-4 flex-none text-primary" />
+              <span>You’ll pay on Paga’s secure page by bank transfer, card, USSD or Paga wallet, then come straight back here. Kolekt confirms the payment with Paga before it counts. No screenshot needed.</span>
+            </p>
+          </div>
+        </section>
+        <div className="flex items-center justify-center gap-2.5 py-2 text-sm font-medium text-muted" aria-live="polite">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60 motion-reduce:hidden" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+          </span>
+          Already paid? This page updates by itself.
+        </div>
+        {props.mode === "sandbox" && (
+          <p className="text-center text-xs text-muted">Paga sandbox: test card 4187 4274 1556 4246, 09/32, CVV 828, password 3310, OTP 12345.</p>
+        )}
+        <p className="text-center text-xs text-muted">Reference {props.reference}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-6 space-y-4">
       <section className="overflow-hidden rounded-[30px] border border-accent/35 bg-white shadow-soft">
