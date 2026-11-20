@@ -22,13 +22,22 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const base = await appUrl();
 
-  if (url.searchParams.get("return")) {
-    // Paga appends charge_reference, status_code and status_message. Never trust them alone.
-    const reference = url.searchParams.get("charge_reference") ?? url.searchParams.get("ref") ?? "";
-    const verification = reference ? await verifyCheckout(reference, AMOUNT) : null;
+  // Back from Paga (it appends charge_reference, status_code, status_message), or a manual ?verify=REF.
+  // Paga's parameters prove nothing on their own; the server-side verify call decides.
+  const sp = url.searchParams;
+  const isReturn = sp.has("charge_reference") || sp.has("status_code") || sp.has("return") || sp.has("verify");
+  if (isReturn) {
+    // A charge_url that already had a query string can come back as "…?a=1?charge_reference=…",
+    // so also dig the reference out of any value that contains it.
+    const all = [...sp.entries()].map(([k, v]) => `${k}=${v}`).join("&");
+    const fromMangled = all.match(/charge_reference=([A-Za-z0-9_-]+)/)?.[1];
+    const reference = sp.get("verify") ?? sp.get("charge_reference") ?? fromMangled ?? sp.get("ref")?.split("?")[0] ?? "";
+    const amount = Number(sp.get("amount") ?? AMOUNT);
+    const verification = reference ? await verifyCheckout(reference, amount) : null;
     return json({
-      step: "2. Back from Paga Checkout",
-      pagaSentBack: Object.fromEntries(url.searchParams),
+      step: "2. Verify a Checkout payment",
+      reference: reference || "(none found in the URL)",
+      pagaSentBack: Object.fromEntries(sp),
       serverVerification: verification,
       verdict: verification?.paid
         ? "✓ Checkout works end to end: Paga confirmed the payment on the server."
@@ -50,9 +59,11 @@ export async function GET(req: Request) {
       amount: AMOUNT,
       email: me.email,
       phoneNumber: me.phone,
-      chargeUrl: `${base}/api/paga-check/checkout?return=1&ref=${reference}`,
+      // No query string of our own: Paga appends ?charge_reference=… and we read the reference from that.
+      chargeUrl: `${base}/api/paga-check/checkout`,
       callbackUrl: `${base}/api/webhooks/paga-checkout`,
     }),
     howToPay: "Open payWithThisLink. Sandbox card: 4187427415564246, expiry 09/32, CVV 828, password 3310, OTP 12345. Paga then sends you back here and the payment is verified on the server.",
+    verifyLaterWith: `${base}/api/paga-check/checkout?verify=${reference}`,
   });
 }
