@@ -379,7 +379,7 @@ export async function collectTestPaymentRequest(input: { phoneNumber: string; ca
     amount: 50,
     currency: "NGN",
     payer: { name: "Bello Ramon", phoneNumber: input.phoneNumber },
-    payee: { name: "Your business name" },
+    payee: { name: "Kolekt" },
     expiryDateTimeUTC: pagaDate(new Date(Date.now() + 24 * 3600e3)),
     isSuppressMessages: true,
     payerCollectionFeeShare: 1,
@@ -436,7 +436,7 @@ export async function collectRouteSweep(input: { phoneNumber: string; callBackUr
   const expiry = pagaDate(new Date(stamp + 24 * 3600e3));
   const phone = input.phoneNumber;
   const payment = (ref: string, methods: string[], payer: Record<string, string>) => ({
-    referenceNumber: ref, amount: 50, currency: "NGN", payer, payee: { name: "Kolekt test" },
+    referenceNumber: ref, amount: 50, currency: "NGN", payer, payee: { name: "Kolekt" },
     expiryDateTimeUTC: expiry, isSuppressMessages: true, payerCollectionFeeShare: 1, payeeCollectionFeeShare: 0,
     isAllowPartialPayments: false, isAllowOverPayments: false, callBackUrl: input.callBackUrl, paymentMethods: methods,
   });
